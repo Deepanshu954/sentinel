@@ -97,8 +97,8 @@ If C >= 0.75 → DISPATCH
 If C < 0.75 → HOLD  
 
 ## CURRENT STATUS
-Week: 2 COMPLETED ✅  
-Current task: Week 2.2 — InfluxDB + Grafana integration  
+Week: 3 COMPLETED ✅  
+Current task: Week 4 — Orchestrator Machine Learning Integration
 
 Completed:
 - [x] docker-compose.yml skeleton
@@ -111,12 +111,12 @@ Completed:
 - [x] scripts/generate_jwt.py for testing
 
 - [x] Kafka Streams feature job (basic version implemented)
-- [ ] 26-feature vector pipeline (only 3 features implemented currently)
+- [x] 26-feature vector pipeline (temporal, statistical, infra completed)
 - [ ] Grafana basic dashboard
-- [ ] Python ML: training data generator
-- [ ] Python ML: XGBoost model trained
-- [ ] Python ML: Isolation Forest trained
-- [ ] Python ML: FastAPI service /predict /anomaly
+- [x] Python ML: training data generator (30 Day Vectorized)
+- [x] Python ML: XGBoost model trained (MAE 1.08)
+- [x] Python ML: Isolation Forest trained
+- [x] Python ML: FastAPI service /predict /anomaly
 - [ ] Spring Boot: PredictionScheduler
 - [ ] Spring Boot: ConfidenceGate
 - [ ] Spring Boot: ActionDispatcher
@@ -126,16 +126,13 @@ Completed:
 - [x] README with architecture diagram
 
 ## KNOWN ISSUES / BLOCKERS
-- Feature pipeline is minimal (only 3 features)
-- No rolling window aggregation yet
-- InfluxDB ingestion not fully verified
-- Grafana dashboard not configured
+- InfluxDB ingestion verified, but visual Grafana dashboard layout still needs configuration.
 
 ## SYSTEM STATE SUMMARY
 
-Gateway → Kafka → Streams → Features  
+Gateway → Kafka → Streams → Features → ML Rest Inference
 ✅ WORKING END-TO-END  
 
 Next:
-Features → InfluxDB → Grafana  
+Action Dispatching → Scaling Directives  
 🚧 IN PROGRESS

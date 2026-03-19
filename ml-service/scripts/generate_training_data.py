@@ -6,7 +6,7 @@ def generate_data():
     np.random.seed(42)
     print("Generating 30 days of 1-second interval timestamps...")
     # 30 days * 24 * 60 * 60 = 2,592,000 rows
-    dates = pd.date_range(start="2024-01-01", periods=2592000, freq='S')
+    dates = pd.date_range(start="2024-01-01", periods=2592000, freq='s')
     
     print("Modeling synthetic request rates...")
     req_count = np.full(2592000, 10.0)
@@ -106,7 +106,7 @@ def generate_data():
     os.makedirs('data', exist_ok=True)
     out_path = 'data/training_data.parquet'
     print(f"Saving to {out_path} ...")
-    df_final.to_parquet(out_path, engine='pyarrow')
+    df_final.to_parquet(out_path, engine='fastparquet')
     
     print("\n--- Summary Statistics ---")
     print(f"Total Rows: {len(df_final)}")

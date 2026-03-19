@@ -56,8 +56,24 @@ docker-compose.override.yml
 .DS_Store
 Thumbs.db
 
-# ─── Data / Models ────────────────────────────────────────────────────────────
-*.pkl
+# ─── Data / Models / Outputs ──────────────────────────────────────────────────
+# Ignore huge datasets and training checkpoints
+data/
+ml-service/data/*.parquet
+
+# Ignore local testing logs and temporary SIP sandbox folders
+test_outputs.log
+e2e_test_log.txt
+.gotmp/
+.tmp/
+.jvmtmp/
+
+# Standard model ignores
 *.model
 *.h5
-data/
+*.pkl
+
+# EXCEPTION: We MUST commit the production `.pkl` and `.json` models 
+# inside ml-service/models/ so the Dockerfile can successfully COPY them!
+!ml-service/models/*.pkl
+!ml-service/models/*.json

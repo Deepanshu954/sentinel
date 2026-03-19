@@ -1,5 +1,20 @@
 FROM python:3.11-slim
+
+RUN groupadd -r sentinel && useradd -r -g sentinel sentinel
+
 WORKDIR /app
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-CMD ["python", "-c", "print('ML Service - Not implemented yet'); import time; time.sleep(999999)"]
+
+COPY models/ /app/models/
+COPY service/ /app/service/
+COPY scripts/ /app/scripts/
+
+RUN chown -R sentinel:sentinel /app
+
+USER sentinel
+
+EXPOSE 8000
+
+CMD ["uvicorn", "service.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

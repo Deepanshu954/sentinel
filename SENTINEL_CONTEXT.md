@@ -3,7 +3,7 @@
 
 ## PROJECT IDENTITY
 Name: Sentinel — Intelligent API Observability & Auto-Scaling Platform
-GitHub: https://github.com/Deepanshu954/Sentinel
+GitHub: https://github.com/Deepanshu954/sentinel
 Developer: Deepanshu Chauhan (E23CSEU1617, Bennett University)
 Linked research paper: Optimizing API Performance Using AI-Based Predictive Request Management
 

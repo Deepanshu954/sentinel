@@ -1,0 +1,63 @@
+# ─── Environment ──────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ─── Go ───────────────────────────────────────────────────────────────────────
+gateway/gateway
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# ─── Java / Maven ─────────────────────────────────────────────────────────────
+orchestrator/target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+*.ctxt
+.mtj.tmp/
+hs_err_pid*
+replay_pid*
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# ─── Python ───────────────────────────────────────────────────────────────────
+ml-service/__pycache__/
+ml-service/*.pyc
+ml-service/.mypy_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ─── IDE ──────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── Data / Models ────────────────────────────────────────────────────────────
+*.pkl
+*.model
+*.h5
+data/

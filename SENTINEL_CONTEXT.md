@@ -20,11 +20,11 @@ Sentinel is a 6-service distributed backend platform that:
 
 ## TECH STACK
 - Gateway: Go 1.22, net/http, golang-jwt/jwt/v5, redis/go-redis/v9, confluent-kafka-go/v2, prometheus/client_golang
-- Streaming: Kafka Streams embedded in Java (NOT Flink — simpler, same resume value)
-- Storage: InfluxDB 2.7 (time-series), Redis 7.x (cache+pubsub+ratelimit), PostgreSQL 16 (config+audit)
-- ML Service: Python 3.11, FastAPI, uvicorn, xgboost, scikit-learn, pandas, numpy, pydantic
-- Orchestrator: Java 21, Spring Boot 3.3, Spring Security, Spring Data JPA, Lettuce (Redis), InfluxDB client
-- Infra: Docker Compose, Prometheus 2.51, Grafana 10.4, Kafka 7.6 (KRaft mode, no Zookeeper)
+- Streaming: Kafka Streams embedded in Java
+- Storage: InfluxDB 2.7, Redis 7.x, PostgreSQL 16
+- ML Service: Python 3.11, FastAPI, xgboost, scikit-learn
+- Orchestrator: Java 21, Spring Boot 3.3
+- Infra: Docker Compose, Prometheus, Grafana, Kafka (KRaft mode)
 
 ## NETWORKING (Docker internal DNS)
 - gateway:8080
@@ -54,38 +54,51 @@ Sentinel is a 6-service distributed backend platform that:
 - POSTGRES_DB=sentinel
 
 ## KAFKA TOPICS
-- api.events — raw request metadata (gateway publishes)
-- api.features — computed 26-feature vectors (Kafka Streams publishes)
-- scaling.actions — dispatch directives (orchestrator publishes, consumers act)
+- api.events — raw request metadata (gateway publishes) ✅
+- api.features — feature vectors (Kafka Streams publishes) ✅
+- scaling.actions — dispatch directives (future)
 
 ## KAFKA EVENT SCHEMA (api.events)
-{"ts": 1700000000000, "endpoint": "/api/products", "method": "GET",
- "client_id": "user-abc", "latency_ms": 23, "status": 200, "bytes_sent": 1024}
+{"ts":1700000000000,"endpoint":"/api/products","method":"GET","client_id":"user-abc","latency_ms":23,"status":200,"bytes_sent":1024}
 
-## FEATURE VECTOR SCHEMA (26 features, exact order)
-Temporal (8): hour_sin, hour_cos, dow_sin, dow_cos, week_of_year, is_weekend, is_holiday, day_of_month
+## FEATURE VECTOR SCHEMA (TARGET - 26 features)
+Temporal (8): hour_sin, hour_cos, dow_sin, dow_cos, week_of_year, is_weekend, is_holiday, day_of_month  
 Statistical (12): req_rate_1m, req_rate_5m, req_rate_15m, req_rate_30m,
-                  latency_std_5m, latency_std_15m, req_max_5m, req_max_15m,
-                  ewma_03, ewma_07, rate_of_change, autocorr_lag1
+latency_std_5m, latency_std_15m, req_max_5m, req_max_15m,
+ewma_03, ewma_07, rate_of_change, autocorr_lag1  
 Infra State (6): cpu_util, memory_pressure, active_connections,
-                 cache_hit_ratio, replica_count, queue_depth
+cache_hit_ratio, replica_count, queue_depth  
+
+## CURRENT FEATURE PIPELINE (IMPLEMENTED)
+Currently only minimal features are implemented:
+- request_count
+- latency_avg
+- req_rate_1m
+
+Example:
+{
+  "endpoint": "/api/test",
+  "timestamp": "...",
+  "request_count": 1,
+  "latency_avg": 3.0,
+  "req_rate_1m": 1.0
+}
 
 ## INFLUXDB SCHEMA
-Measurement: api_features
-Tags: endpoint (string)
-Fields: all 26 feature names (float64)
-Timestamp: nanosecond precision
-Retention: 15 days
+Measurement: api_features  
+Tags: endpoint (string)  
+Fields: all 26 feature names (float64)  
+Timestamp: nanosecond precision  
+Retention: 15 days  
 
 ## CONFIDENCE GATE (from research paper)
 C = 1 - (σ_pred / μ_pred)
-where σ = std of prediction interval bounds, μ = predicted value
-If C >= 0.75 → DISPATCH (pre-warm Redis, publish to scaling.actions)
-If C < 0.75 → HOLD (log reason, do nothing)
+If C >= 0.75 → DISPATCH  
+If C < 0.75 → HOLD  
 
 ## CURRENT STATUS
-Week: 1 COMPLETED ✅ | Starting Week 2
-Current task: Building Kafka Streams feature extraction pipeline
+Week: 2 COMPLETED ✅  
+Current task: Week 2.2 — InfluxDB + Grafana integration  
 
 Completed:
 - [x] docker-compose.yml skeleton
@@ -96,8 +109,9 @@ Completed:
 - [x] Go gateway: /metrics endpoint
 - [x] InfluxDB setup (via docker-compose)
 - [x] scripts/generate_jwt.py for testing
-- [ ] Kafka Streams feature job
-- [ ] 26-feature vector pipeline
+
+- [x] Kafka Streams feature job (basic version implemented)
+- [ ] 26-feature vector pipeline (only 3 features implemented currently)
 - [ ] Grafana basic dashboard
 - [ ] Python ML: training data generator
 - [ ] Python ML: XGBoost model trained
@@ -109,12 +123,19 @@ Completed:
 - [ ] Spring Boot: PostgreSQL audit log
 - [ ] Full Grafana dashboard (7 panels)
 - [ ] demo_surge.sh script
-- [ ] README with architecture diagram
+- [x] README with architecture diagram
 
 ## KNOWN ISSUES / BLOCKERS
-None - Week 1 gateway fully operational. Gateway tested with:
-- JWT auth working (valid tokens authenticated, invalid tokens rejected with 401)
-- Rate limiting configured (Redis token bucket)
-- Kafka producer connected to kafka:9092
-- Prometheus metrics exposed at /metrics
-- All services healthy in docker-compose
+- Feature pipeline is minimal (only 3 features)
+- No rolling window aggregation yet
+- InfluxDB ingestion not fully verified
+- Grafana dashboard not configured
+
+## SYSTEM STATE SUMMARY
+
+Gateway → Kafka → Streams → Features  
+✅ WORKING END-TO-END  
+
+Next:
+Features → InfluxDB → Grafana  
+🚧 IN PROGRESS

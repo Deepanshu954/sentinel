@@ -13,6 +13,7 @@ services:
       - INFLUX_TOKEN=${INFLUX_TOKEN}
       - INFLUX_ORG=${INFLUX_ORG}
       - INFLUX_BUCKET=${INFLUX_BUCKET}
+      - TARGET_URL=${TARGET_URL:-http://localhost:9999}
       - RATE_LIMIT_PER_MIN=${RATE_LIMIT_PER_MIN}
       - ML_SERVICE_URL=${ML_SERVICE_URL}
     depends_on:

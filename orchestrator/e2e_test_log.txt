@@ -1,0 +1,82 @@
+=== SENTINEL E2E TEST LOG ===
+Thu Mar 19 21:55:25 IST 2026
+Starting Orchestrator locally...
+Waiting for Spring Boot to initialize...
+Generating JWT...
+Sending 20 test requests to Gateway...
+502
+502
+502
+502
+502
+502
+502
+502
+502
+502
+502
+502
+502
+502
+502
+502
+502
+502
+502
+502
+Waiting for Kafka Streams and InfluxDBWriter to process...
+Shutting down Orchestrator...
+Checking InfluxDB for saved Data...
+
+Appending Orchestrator logs (last 50 lines)...
+	at org.apache.kafka.clients.consumer.internals.AbstractCoordinator.ensureCoordinatorReady(AbstractCoordinator.java:302) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.AbstractCoordinator.ensureCoordinatorReady(AbstractCoordinator.java:263) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.ConsumerCoordinator.coordinatorUnknownAndUnreadySync(ConsumerCoordinator.java:446) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.ConsumerCoordinator.poll(ConsumerCoordinator.java:478) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.LegacyKafkaConsumer.updateAssignmentMetadataIfNeeded(LegacyKafkaConsumer.java:651) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.LegacyKafkaConsumer.poll(LegacyKafkaConsumer.java:610) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.LegacyKafkaConsumer.poll(LegacyKafkaConsumer.java:590) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.KafkaConsumer.poll(KafkaConsumer.java:874) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.streams.processor.internals.StreamThread.pollRequests(StreamThread.java:1230) ~[kafka-streams-3.7.0.jar!/:na]
+	at org.apache.kafka.streams.processor.internals.StreamThread.pollPhase(StreamThread.java:1178) ~[kafka-streams-3.7.0.jar!/:na]
+	at org.apache.kafka.streams.processor.internals.StreamThread.runOnceWithoutProcessingThreads(StreamThread.java:909) ~[kafka-streams-3.7.0.jar!/:na]
+	at org.apache.kafka.streams.processor.internals.StreamThread.runLoop(StreamThread.java:686) ~[kafka-streams-3.7.0.jar!/:na]
+	at org.apache.kafka.streams.processor.internals.StreamThread.run(StreamThread.java:645) ~[kafka-streams-3.7.0.jar!/:na]
+
+2026-03-19T21:55:47.813+05:30  WARN 43461 --- [pool-1-thread-1] org.apache.kafka.clients.NetworkClient   : [Consumer clientId=consumer-sentinel-influxdb-writer-1, groupId=sentinel-influxdb-writer] Error connecting to node kafka:9092 (id: 1 rack: null)
+
+java.net.UnknownHostException: kafka
+	at java.base/java.net.InetAddress$CachedLookup.get(InetAddress.java:909) ~[na:na]
+	at java.base/java.net.InetAddress.getAllByName0(InetAddress.java:1702) ~[na:na]
+	at java.base/java.net.InetAddress.getAllByName(InetAddress.java:1582) ~[na:na]
+	at org.apache.kafka.clients.DefaultHostResolver.resolve(DefaultHostResolver.java:27) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.ClientUtils.resolve(ClientUtils.java:124) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.ClusterConnectionStates$NodeConnectionState.resolveAddresses(ClusterConnectionStates.java:536) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.ClusterConnectionStates$NodeConnectionState.currentAddress(ClusterConnectionStates.java:511) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.ClusterConnectionStates$NodeConnectionState.access$200(ClusterConnectionStates.java:466) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.ClusterConnectionStates.currentAddress(ClusterConnectionStates.java:173) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.NetworkClient.initiateConnect(NetworkClient.java:1050) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.NetworkClient.access$700(NetworkClient.java:76) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.NetworkClient$DefaultMetadataUpdater.maybeUpdate(NetworkClient.java:1230) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.NetworkClient$DefaultMetadataUpdater.maybeUpdate(NetworkClient.java:1130) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.NetworkClient.poll(NetworkClient.java:582) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.ConsumerNetworkClient.poll(ConsumerNetworkClient.java:281) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.ConsumerNetworkClient.poll(ConsumerNetworkClient.java:252) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.ConsumerNetworkClient.poll(ConsumerNetworkClient.java:243) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.ConsumerNetworkClient.awaitMetadataUpdate(ConsumerNetworkClient.java:165) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.AbstractCoordinator.ensureCoordinatorReady(AbstractCoordinator.java:302) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.AbstractCoordinator.ensureCoordinatorReady(AbstractCoordinator.java:263) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.ConsumerCoordinator.coordinatorUnknownAndUnreadySync(ConsumerCoordinator.java:446) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.ConsumerCoordinator.poll(ConsumerCoordinator.java:478) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.LegacyKafkaConsumer.updateAssignmentMetadataIfNeeded(LegacyKafkaConsumer.java:651) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.LegacyKafkaConsumer.poll(LegacyKafkaConsumer.java:610) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.internals.LegacyKafkaConsumer.poll(LegacyKafkaConsumer.java:590) ~[kafka-clients-3.7.0.jar!/:na]
+	at org.apache.kafka.clients.consumer.KafkaConsumer.poll(KafkaConsumer.java:874) ~[kafka-clients-3.7.0.jar!/:na]
+	at com.sentinel.streaming.service.InfluxDBWriter.run(InfluxDBWriter.java:94) ~[!/:1.0.0]
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:545) ~[na:na]
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:1474) ~[na:na]
+
+DONE.

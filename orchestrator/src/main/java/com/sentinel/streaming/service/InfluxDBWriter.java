@@ -1,6 +1,7 @@
 package com.sentinel.streaming.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.influxdb.client.InfluxDBClient;
 import com.influxdb.client.InfluxDBClientFactory;
 import com.influxdb.client.WriteApi;
@@ -9,7 +10,6 @@ import com.influxdb.client.domain.WritePrecision;
 import com.influxdb.client.write.Point;
 import com.sentinel.streaming.model.FeatureVector;
 
-import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 
 import org.apache.kafka.clients.consumer.*;
@@ -18,6 +18,8 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -58,14 +60,15 @@ public class InfluxDBWriter implements Runnable {
 
     public InfluxDBWriter(ObjectMapper mapper) {
         this.mapper = mapper;
+        this.mapper.registerModule(new JavaTimeModule());
     }
 
-    @PostConstruct
-    public void init() {
+    @EventListener(ApplicationReadyEvent.class)
+    public void start() {
         this.influxClient = InfluxDBClientFactory.create(influxUrl, influxToken.toCharArray(), org, bucket);
         this.writeApi = influxClient.makeWriteApi(WriteOptions.builder()
-                .batchSize(100)
-                .flushInterval(1000)
+                .batchSize(50)
+                .flushInterval(2000)
                 .bufferLimit(10_000)
                 .jitterInterval(200)
                 .retryInterval(2000)
@@ -100,7 +103,7 @@ public class InfluxDBWriter implements Runnable {
                             writeApi.writePoint(point);
                         }
                     } catch (Exception e) {
-                        log.warn("Skipping malformed JSON while saving feature vector to InfluxDB: {}", e.getMessage());
+                        log.warn("Skipping malformed vector logic without crashing: {}", e.getMessage());
                     }
                 }
             }
@@ -117,9 +120,32 @@ public class InfluxDBWriter implements Runnable {
         return Point.measurement("api_features")
                 .time(fv.timestamp(), WritePrecision.NS)
                 .addTag("endpoint", fv.endpoint())
-                .addField("request_count", fv.requestCount())
-                .addField("latency_avg", fv.latencyAvg())
-                .addField("req_rate_1m", fv.reqRate1m());
+                .addField("hour_sin", fv.hourSin())
+                .addField("hour_cos", fv.hourCos())
+                .addField("dow_sin", fv.dowSin())
+                .addField("dow_cos", fv.dowCos())
+                .addField("week_of_year", fv.weekOfYear())
+                .addField("is_weekend", fv.isWeekend())
+                .addField("is_holiday", fv.isHoliday())
+                .addField("day_of_month", fv.dayOfMonth())
+                .addField("req_rate_1m", fv.reqRate1m())
+                .addField("req_rate_5m", fv.reqRate5m())
+                .addField("req_rate_15m", fv.reqRate15m())
+                .addField("req_rate_30m", fv.reqRate30m())
+                .addField("latency_std_5m", fv.latencyStd5m())
+                .addField("latency_std_15m", fv.latencyStd15m())
+                .addField("req_max_5m", fv.reqMax5m())
+                .addField("req_max_15m", fv.reqMax15m())
+                .addField("ewma_03", fv.ewma03())
+                .addField("ewma_07", fv.ewma07())
+                .addField("rate_of_change", fv.rateOfChange())
+                .addField("autocorr_lag1", fv.autocorrLag1())
+                .addField("cpu_util", fv.cpuUtil())
+                .addField("memory_pressure", fv.memoryPressure())
+                .addField("active_connections", fv.activeConnections())
+                .addField("cache_hit_ratio", fv.cacheHitRatio())
+                .addField("replica_count", fv.replicaCount())
+                .addField("queue_depth", fv.queueDepth());
     }
 
     @PreDestroy
@@ -132,18 +158,12 @@ public class InfluxDBWriter implements Runnable {
         log.info("InfluxDBWriter shutting down gracefully");
         try {
             if (writeApi != null) writeApi.close();
-        } catch (Exception e) {
-            log.warn("Error closing WriteApi: {}", e.getMessage());
-        }
+        } catch (Exception e) {}
         try {
             if (consumer != null) consumer.close();
-        } catch (Exception e) {
-            log.warn("Error closing Kafka consumer: {}", e.getMessage());
-        }
+        } catch (Exception e) {}
         try {
             if (influxClient != null) influxClient.close();
-        } catch (Exception e) {
-            log.warn("Error closing InfluxDB client: {}", e.getMessage());
-        }
+        } catch (Exception e) {}
     }
 }

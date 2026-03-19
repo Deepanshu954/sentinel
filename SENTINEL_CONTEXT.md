@@ -84,17 +84,18 @@ If C >= 0.75 → DISPATCH (pre-warm Redis, publish to scaling.actions)
 If C < 0.75 → HOLD (log reason, do nothing)
 
 ## CURRENT STATUS
-[UPDATE THIS AFTER EVERY SESSION]
-Week: [1/2/3/4]
-Current task: [what you are working on]
+Week: 1 COMPLETED ✅ | Starting Week 2
+Current task: Building Kafka Streams feature extraction pipeline
+
 Completed:
-- [ ] docker-compose.yml skeleton
-- [ ] Go gateway: main.go
-- [ ] Go gateway: JWT auth middleware
-- [ ] Go gateway: rate limit middleware
-- [ ] Go gateway: Kafka producer
-- [ ] Go gateway: /metrics endpoint
-- [ ] InfluxDB setup
+- [x] docker-compose.yml skeleton
+- [x] Go gateway: main.go
+- [x] Go gateway: JWT auth middleware
+- [x] Go gateway: rate limit middleware
+- [x] Go gateway: Kafka producer
+- [x] Go gateway: /metrics endpoint
+- [x] InfluxDB setup (via docker-compose)
+- [x] scripts/generate_jwt.py for testing
 - [ ] Kafka Streams feature job
 - [ ] 26-feature vector pipeline
 - [ ] Grafana basic dashboard
@@ -111,4 +112,9 @@ Completed:
 - [ ] README with architecture diagram
 
 ## KNOWN ISSUES / BLOCKERS
-[Add any bugs or issues here so Opus has full context next session]
+None - Week 1 gateway fully operational. Gateway tested with:
+- JWT auth working (valid tokens authenticated, invalid tokens rejected with 401)
+- Rate limiting configured (Redis token bucket)
+- Kafka producer connected to kafka:9092
+- Prometheus metrics exposed at /metrics
+- All services healthy in docker-compose

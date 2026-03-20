@@ -6,14 +6,13 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - JWT_SECRET=${JWT_SECRET}
-      - REDIS_ADDR=${REDIS_ADDR}
-      - KAFKA_BROKERS=${KAFKA_BROKERS}
-      - INFLUX_URL=${INFLUX_URL}
-      - INFLUX_TOKEN=${INFLUX_TOKEN}
-      - INFLUX_ORG=${INFLUX_ORG}
-      - INFLUX_BUCKET=${INFLUX_BUCKET}
-      - TARGET_URL=${TARGET_URL:-http://localhost:9999}
+      - JWT_SECRET=${JWT_SECRET:-sentinel-super-secret-jwt-key-change-in-prod}
+      - REDIS_ADDR=redis:6379
+      - KAFKA_BROKERS=kafka:9092
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_TOKEN=sentinel-influx-admin-token
+      - INFLUX_ORG=sentinel
+      - INFLUX_BUCKET=sentinel-metrics
       - RATE_LIMIT_PER_MIN=${RATE_LIMIT_PER_MIN}
       - ML_SERVICE_URL=${ML_SERVICE_URL}
     depends_on:
@@ -85,9 +84,9 @@ services:
       DOCKER_INFLUXDB_INIT_MODE: setup
       DOCKER_INFLUXDB_INIT_USERNAME: admin
       DOCKER_INFLUXDB_INIT_PASSWORD: sentinel-influx-password
-      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG}
-      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET}
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN}
+      DOCKER_INFLUXDB_INIT_ORG: sentinel
+      DOCKER_INFLUXDB_INIT_BUCKET: sentinel-metrics
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: sentinel-influx-admin-token
       DOCKER_INFLUXDB_INIT_RETENTION: 15d
     volumes:
       - influxdb-data:/var/lib/influxdb2
@@ -109,9 +108,9 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      - POSTGRES_USER=sentinel
+      - POSTGRES_PASSWORD=sentinel-password
+      - POSTGRES_DB=sentinel
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -131,11 +130,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - INFLUX_URL=${INFLUX_URL}
-      - INFLUX_TOKEN=${INFLUX_TOKEN}
-      - INFLUX_ORG=${INFLUX_ORG}
-      - INFLUX_BUCKET=${INFLUX_BUCKET}
-      - KAFKA_BROKERS=${KAFKA_BROKERS}
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_TOKEN=sentinel-influx-admin-token
+      - INFLUX_ORG=sentinel
+      - INFLUX_BUCKET=sentinel-metrics
+      - KAFKA_BROKERS=kafka:9092
     depends_on:
       influxdb:
         condition: service_healthy
@@ -143,6 +142,8 @@ services:
         condition: service_healthy
     networks:
       - sentinel-network
+    volumes:
+      - ./ml-service/models:/app/models
     restart: unless-stopped
 
   # ─── Orchestrator (Spring Boot) ──────────────────────────────────────────────
@@ -150,19 +151,19 @@ services:
     build: ./orchestrator
     container_name: sentinel-orchestrator
     ports:
-      - "8090:8090"
+      - "8090:8080"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
-      - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER}
-      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
-      - REDIS_ADDR=${REDIS_ADDR}
-      - KAFKA_BROKERS=${KAFKA_BROKERS}
-      - INFLUX_URL=${INFLUX_URL}
-      - INFLUX_TOKEN=${INFLUX_TOKEN}
-      - INFLUX_ORG=${INFLUX_ORG}
-      - INFLUX_BUCKET=${INFLUX_BUCKET}
-      - ML_SERVICE_URL=${ML_SERVICE_URL}
-      - CONFIDENCE_THRESHOLD=${CONFIDENCE_THRESHOLD}
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/sentinel
+      - SPRING_DATASOURCE_USERNAME=sentinel
+      - SPRING_DATASOURCE_PASSWORD=sentinel-password
+      - REDIS_ADDR=${REDIS_ADDR:-redis:6379}
+      - KAFKA_BROKERS=${KAFKA_BROKERS:-kafka:9092}
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_TOKEN=sentinel-influx-admin-token
+      - INFLUX_ORG=sentinel
+      - INFLUX_BUCKET=sentinel-metrics
+      - ML_SERVICE_URL=http://ml-service:8000
+      - CONFIDENCE_THRESHOLD=0.01
     depends_on:
       kafka:
         condition: service_healthy
@@ -173,7 +174,9 @@ services:
       influxdb:
         condition: service_healthy
     networks:
-      - sentinel-network
+      sentinel-network:
+        aliases:
+          - orchestrator
     restart: unless-stopped
 
   # ─── Prometheus ──────────────────────────────────────────────────────────────
@@ -204,6 +207,8 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: sentinel
     volumes:
       - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./infra/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./infra/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
       - grafana-data:/var/lib/grafana
     depends_on:
       - prometheus

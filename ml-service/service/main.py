@@ -92,6 +92,8 @@ def predict(payload: FeatureInput):
     confidence = 1.0 - (diff / max(main_pred, 1.0))
     confidence = max(0.0, min(1.0, confidence))
     
+    print(f"Prediction: {main_pred:.2f}, Confidence: {confidence:.4f}, Features: {payload.features[:5]}...", flush=True)
+    
     CONFIDENCE_SCORE.set(confidence)
     action = "DISPATCH" if confidence >= CONFIDENCE_THRESHOLD else "HOLD"
     
@@ -115,11 +117,11 @@ def detect_anomaly(payload: FeatureInput):
     X = np.array(payload.features).reshape(1, -1)
     score = float(models["iforest"].decision_function(X)[0])
     
-    if score > -0.1:
+    if score < -0.1:
         interpretation = "anomaly"
         is_anomaly = True
         ANOMALIES_DETECTED.inc()
-    elif score >= -0.2 and score <= -0.1:
+    elif score >= -0.1 and score <= 0.0:
         interpretation = "suspicious"
         is_anomaly = False
     else:

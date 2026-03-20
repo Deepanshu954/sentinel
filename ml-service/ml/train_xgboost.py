@@ -5,7 +5,12 @@ import os
 
 def train():
     print("Loading data...")
-    df = pd.read_parquet('../data/training_data.parquet')
+    # Get the directory where this script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Path to data folder relative to script (../data)
+    data_path = os.path.join(script_dir, '..', 'data', 'training_data.parquet')
+    
+    df = pd.read_parquet(data_path)
     
     features = [
         'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'week_of_year',
@@ -58,10 +63,11 @@ def train():
     model_upper.fit(X_train, y_train)
     
     print("Saving models...")
-    os.makedirs('../models', exist_ok=True)
-    model_main.save_model('../models/xgb_model.json')
-    model_lower.save_model('../models/xgb_lower.json')
-    model_upper.save_model('../models/xgb_upper.json')
+    models_dir = os.path.join(script_dir, '..', 'models')
+    os.makedirs(models_dir, exist_ok=True)
+    model_main.save_model(os.path.join(models_dir, 'xgb_model.json'))
+    model_lower.save_model(os.path.join(models_dir, 'xgb_lower.json'))
+    model_upper.save_model(os.path.join(models_dir, 'xgb_upper.json'))
     print("Done!")
 
 if __name__ == '__main__':

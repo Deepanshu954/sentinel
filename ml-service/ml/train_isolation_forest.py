@@ -6,7 +6,12 @@ import os
 
 def train():
     print("Loading data...")
-    df = pd.read_parquet('../data/training_data.parquet')
+    # Get the directory where this script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Path to data folder relative to script (../data)
+    data_path = os.path.join(script_dir, '..', 'data', 'training_data.parquet')
+    
+    df = pd.read_parquet(data_path)
     
     features = [
         'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'week_of_year',
@@ -42,8 +47,10 @@ def train():
     print(f"Precision on test surge events: {precision:.4f}")
     print(f"Recall on test surge events: {recall:.4f}")
     
-    os.makedirs('../models', exist_ok=True)
-    with open('../models/isolation_forest.pkl', 'wb') as f:
+    models_dir = os.path.join(script_dir, '..', 'models')
+    os.makedirs(models_dir, exist_ok=True)
+    model_path = os.path.join(models_dir, 'isolation_forest.pkl')
+    with open(model_path, 'wb') as f:
         pickle.dump(clf, f)
         
     print("Done!")

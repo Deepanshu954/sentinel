@@ -1,79 +1,52 @@
-# ─── Environment ──────────────────────────────────────────────────────────────
-.env
-.env.local
-.env.*.local
+# Sentinel .gitignore
 
-# ─── Go ───────────────────────────────────────────────────────────────────────
-gateway/gateway
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-*.test
-*.out
-vendor/
-
-# ─── Java / Maven ─────────────────────────────────────────────────────────────
-orchestrator/target/
+# ── Build artifacts ──────────────────────────────────
+target/
 *.class
 *.jar
-*.war
-*.ear
-*.log
-*.ctxt
-.mtj.tmp/
-hs_err_pid*
-replay_pid*
-.idea/
-*.iml
-*.ipr
-*.iws
+!orchestrator/target/orchestrator-*.jar
 
-# ─── Python ───────────────────────────────────────────────────────────────────
-ml-service/__pycache__/
-ml-service/*.pyc
-ml-service/.mypy_cache/
+# ── Python ───────────────────────────────────────────
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
+venv/
+.venv/
 *.egg-info/
 dist/
 build/
-.venv/
-venv/
-.pytest_cache/
 
-# ─── Docker ───────────────────────────────────────────────────────────────────
-docker-compose.override.yml
+# ── ML models (large binaries, re-trainable) ────────
+ml-service/models/*.json
+ml-service/models/*.pkl
+ml-service/data/*.parquet
+ml-service/libomp.tar.gz
 
-# ─── IDE ──────────────────────────────────────────────────────────────────────
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# ── Environment ──────────────────────────────────────
+.env
+!.env.example
+
+# ── Validation / test outputs ────────────────────────
+validation_*.txt
+train_log.txt
+e2e_test_log.txt
+e2e_report.md
+orchestrator.log
+
+# ── Temp & OS files ──────────────────────────────────
+/tmp/
+*.tmp
+*.log
 .DS_Store
 Thumbs.db
 
-# ─── Data / Models / Outputs ──────────────────────────────────────────────────
-# Ignore huge datasets and training checkpoints
-data/
-ml-service/data/*.parquet
+# ── IDE ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
 
-# Ignore local testing logs and temporary SIP sandbox folders
-test_outputs.log
-e2e_test_log.txt
-.gotmp/
-.tmp/
-.jvmtmp/
-
-# Standard model ignores
-*.model
-*.h5
-*.pkl
-
-# EXCEPTION: We MUST commit the production `.pkl` and `.json` models 
-# inside ml-service/models/ so the Dockerfile can successfully COPY them!
-!ml-service/models/*.pkl
-!ml-service/models/*.json
+# ── Docker ───────────────────────────────────────────
+docker-compose.override.yml

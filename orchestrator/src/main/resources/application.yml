@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: sentinel-orchestrator
+  datasource:
+    # Use standard JDBC formatting; container will supply Postgres container references natively
+    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB:sentinel}
+    username: ${POSTGRES_USER:sentinel}
+    password: ${POSTGRES_PASSWORD:sentinel123}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  data:
+    redis:
+      # We utilize Spring Boot 3 dynamic binding mappings. 
+      # (spring.data.redis instead of spring.redis)
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:kafka:9092}
+    consumer:
+      group-id: orchestrator-group
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+influx:
+  url: ${INFLUX_URL:http://influxdb:8086}
+  token: ${INFLUX_TOKEN:sentinel-influx-admin-token}
+  org: ${INFLUX_ORG:sentinel}
+  bucket: ${INFLUX_BUCKET:sentinel-metrics}
+
+sentinel:
+  confidence:
+    threshold: ${CONFIDENCE_THRESHOLD:0.75}
+  polling:
+    interval:
+      ms: 5000

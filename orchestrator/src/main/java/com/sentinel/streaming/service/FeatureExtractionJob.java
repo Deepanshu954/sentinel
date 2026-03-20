@@ -17,8 +17,6 @@ import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.StoreBuilder;
 import org.apache.kafka.streams.state.Stores;
-import org.apache.kafka.streams.state.WindowStore;
-import org.apache.kafka.streams.state.WindowStoreIterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -52,15 +50,10 @@ public class FeatureExtractionJob {
     public void start() {
         Topology topology = new Topology();
 
-        StoreBuilder<WindowStore<String, String>> windowStoreBuilder = Stores.windowStoreBuilder(
-                Stores.persistentWindowStore(
-                        "event-window-store",
-                        Duration.ofMinutes(30),
-                        Duration.ofMinutes(30),
-                        false
-                ),
+        StoreBuilder<KeyValueStore<String, Long>> countStoreBuilder = Stores.keyValueStoreBuilder(
+                Stores.persistentKeyValueStore("count-store"),
                 Serdes.String(),
-                Serdes.String()
+                Serdes.Long()
         );
 
         StoreBuilder<KeyValueStore<String, String>> keyValueStoreBuilder = Stores.keyValueStoreBuilder(
@@ -71,7 +64,7 @@ public class FeatureExtractionJob {
 
         topology.addSource("Source", "api.events")
                 .addProcessor("Process", () -> new FeatureProcessor(mapper), "Source")
-                .addStateStore(windowStoreBuilder, "Process")
+                .addStateStore(countStoreBuilder, "Process")
                 .addStateStore(keyValueStoreBuilder, "Process")
                 .addSink("Sink", "api.features", "Process");
 
@@ -96,7 +89,7 @@ public class FeatureExtractionJob {
     public static class FeatureProcessor implements Processor<String, String, String, String> {
         private final ObjectMapper mapper;
         private ProcessorContext<String, String> context;
-        private WindowStore<String, String> windowStore;
+        private KeyValueStore<String, Long> countStore;
         private KeyValueStore<String, String> ewmaStore;
 
         public FeatureProcessor(ObjectMapper mapper) {
@@ -106,7 +99,7 @@ public class FeatureExtractionJob {
         @Override
         public void init(ProcessorContext<String, String> context) {
             this.context = context;
-            this.windowStore = context.getStateStore("event-window-store");
+            this.countStore = context.getStateStore("count-store");
             this.ewmaStore = context.getStateStore("ewma-store");
 
             context.schedule(Duration.ofSeconds(1), PunctuationType.WALL_CLOCK_TIME, this::punctuate);
@@ -118,11 +111,12 @@ public class FeatureExtractionJob {
                 JsonNode node = mapper.readTree(record.value());
                 String endpoint = node.has("endpoint") ? node.get("endpoint").asText() : "unknown";
                 long timestamp = node.has("ts") ? node.get("ts").asLong() : record.timestamp();
+                long secondBucket = timestamp / 1000;
+                String bucketKey = endpoint + ":" + secondBucket;
 
-                // Store event keyed by endpoint
-                windowStore.put(endpoint, record.value(), timestamp);
+                Long current = countStore.get(bucketKey);
+                countStore.put(bucketKey, (current == null ? 0L : current) + 1);
                 
-                // Keep the EWMA state initialized
                 if (ewmaStore.get(endpoint) == null) {
                     EndpointPersistentState state = new EndpointPersistentState();
                     ewmaStore.put(endpoint, mapper.writeValueAsString(state));
@@ -134,6 +128,7 @@ public class FeatureExtractionJob {
         }
 
         private void punctuate(long timestamp) {
+            log.info("Punctuation cycle started at: {}", timestamp);
             Instant now = Instant.now();
             LocalDateTime ldt = LocalDateTime.ofInstant(now, ZoneOffset.UTC);
 
@@ -168,55 +163,30 @@ public class FeatureExtractionJob {
 
                     EndpointPersistentState persistentState = mapper.readValue(entry.value, EndpointPersistentState.class);
 
-                    long t1m = now.minusSeconds(60).toEpochMilli();
-                    long t5m = now.minusSeconds(300).toEpochMilli();
-                    long t15m = now.minusSeconds(900).toEpochMilli();
-                    long t30m = now.minusSeconds(1800).toEpochMilli();
-
-                    List<Long> latencies1m = new ArrayList<>();
-                    List<Long> latencies5m = new ArrayList<>();
-                    List<Long> latencies15m = new ArrayList<>();
-                    List<Long> requestCounts1mWindow = new ArrayList<>();
-                    List<Long> requestCounts5mWindow = new ArrayList<>();
-                    List<Long> requestCounts15mWindow = new ArrayList<>();
-                    List<Long> requestCounts30mWindow = new ArrayList<>();
-
-                    long epochNow = now.toEpochMilli();
-                    try (WindowStoreIterator<String> iterator = windowStore.fetch(endpoint, t30m, epochNow)) {
-                        while (iterator.hasNext()) {
-                            org.apache.kafka.streams.KeyValue<Long, String> windowEntry = iterator.next();
-                            long ts = windowEntry.key;
-                            try {
-                                JsonNode node = mapper.readTree(windowEntry.value);
-                                long latency = node.has("latency_ms") ? node.get("latency_ms").asLong() : 0;
-                                
-                                requestCounts30mWindow.add(ts);
-                                if (ts >= t15m) {
-                                    requestCounts15mWindow.add(ts);
-                                    latencies15m.add(latency);
-                                }
-                                if (ts >= t5m) {
-                                    requestCounts5mWindow.add(ts);
-                                    latencies5m.add(latency);
-                                }
-                                if (ts >= t1m) {
-                                    requestCounts1mWindow.add(ts);
-                                    latencies1m.add(latency);
-                                }
-                            } catch (Exception ignored) {}
+                    long total1m = 0, total5m = 0, total15m = 0, total30m = 0;
+                    long nowSec = now.getEpochSecond();
+                    
+                    for (int i = 0; i < 1800; i++) {
+                        long bucket = nowSec - i;
+                        Long val = countStore.get(endpoint + ":" + bucket);
+                        if (val != null) {
+                            total30m += val;
+                            if (i < 900) total15m += val;
+                            if (i < 300) total5m += val;
+                            if (i < 60) total1m += val;
                         }
                     }
 
-                    double reqRate1m = requestCounts1mWindow.size() / 60.0;
-                    double reqRate5m = requestCounts5mWindow.size() / 300.0;
-                    double reqRate15m = requestCounts15mWindow.size() / 900.0;
-                    double reqRate30m = requestCounts30mWindow.size() / 1800.0;
+                    double reqRate1m = total1m / 60.0;
+                    double reqRate5m = total5m / 300.0;
+                    double reqRate15m = total15m / 900.0;
+                    double reqRate30m = total30m / 1800.0;
 
-                    double latencyStd5m = calcStdDev(latencies5m);
-                    double latencyStd15m = calcStdDev(latencies15m);
-                    
-                    double reqMax5m = requestCounts5mWindow.size(); 
-                    double reqMax15m = requestCounts15mWindow.size();
+                    // Simplified stats for MVP after removing WindowStore
+                    double latencyStd5m = 0.1; 
+                    double latencyStd15m = 0.1;
+                    double reqMax5m = total5m; 
+                    double reqMax15m = total15m;
 
                     double ewma03 = persistentState.ewma03;
                     double ewma07 = persistentState.ewma07;

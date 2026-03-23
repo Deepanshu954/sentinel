@@ -1,6 +1,5 @@
 package com.sentinel.streaming.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -9,14 +8,14 @@ import jakarta.annotation.PreDestroy;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.Topology;
-import org.apache.kafka.streams.processor.PunctuationType;
 import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.ProcessorContext;
 import org.apache.kafka.streams.processor.api.Record;
-import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.StoreBuilder;
 import org.apache.kafka.streams.state.Stores;
+import org.apache.kafka.streams.state.WindowStore;
+import org.apache.kafka.streams.state.WindowStoreIterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -29,7 +28,9 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.IsoFields;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
 
 @Service
 public class FeatureExtractionJob {
@@ -50,10 +51,15 @@ public class FeatureExtractionJob {
     public void start() {
         Topology topology = new Topology();
 
-        StoreBuilder<KeyValueStore<String, Long>> countStoreBuilder = Stores.keyValueStoreBuilder(
-                Stores.persistentKeyValueStore("count-store"),
+        StoreBuilder<WindowStore<String, Long>> countStoreBuilder = Stores.windowStoreBuilder(
+                Stores.persistentWindowStore("count-window", Duration.ofMinutes(30), Duration.ofSeconds(1), false),
                 Serdes.String(),
                 Serdes.Long()
+        );
+        StoreBuilder<WindowStore<String, Double>> latencyStoreBuilder = Stores.windowStoreBuilder(
+                Stores.persistentWindowStore("latency-window", Duration.ofMinutes(15), Duration.ofSeconds(1), false),
+                Serdes.String(),
+                Serdes.Double()
         );
 
         StoreBuilder<KeyValueStore<String, String>> keyValueStoreBuilder = Stores.keyValueStoreBuilder(
@@ -65,6 +71,7 @@ public class FeatureExtractionJob {
         topology.addSource("Source", "api.events")
                 .addProcessor("Process", () -> new FeatureProcessor(mapper), "Source")
                 .addStateStore(countStoreBuilder, "Process")
+                .addStateStore(latencyStoreBuilder, "Process")
                 .addStateStore(keyValueStoreBuilder, "Process")
                 .addSink("Sink", "api.features", "Process");
 
@@ -89,7 +96,8 @@ public class FeatureExtractionJob {
     public static class FeatureProcessor implements Processor<String, String, String, String> {
         private final ObjectMapper mapper;
         private ProcessorContext<String, String> context;
-        private KeyValueStore<String, Long> countStore;
+        private WindowStore<String, Long> countStore;
+        private WindowStore<String, Double> latencyStore;
         private KeyValueStore<String, String> ewmaStore;
 
         public FeatureProcessor(ObjectMapper mapper) {
@@ -99,10 +107,9 @@ public class FeatureExtractionJob {
         @Override
         public void init(ProcessorContext<String, String> context) {
             this.context = context;
-            this.countStore = context.getStateStore("count-store");
+            this.countStore = context.getStateStore("count-window");
+            this.latencyStore = context.getStateStore("latency-window");
             this.ewmaStore = context.getStateStore("ewma-store");
-
-            context.schedule(Duration.ofSeconds(1), PunctuationType.WALL_CLOCK_TIME, this::punctuate);
         }
 
         @Override
@@ -110,126 +117,152 @@ public class FeatureExtractionJob {
             try {
                 JsonNode node = mapper.readTree(record.value());
                 String endpoint = node.has("endpoint") ? node.get("endpoint").asText() : "unknown";
-                long timestamp = node.has("ts") ? node.get("ts").asLong() : record.timestamp();
-                long secondBucket = timestamp / 1000;
-                String bucketKey = endpoint + ":" + secondBucket;
-
-                Long current = countStore.get(bucketKey);
-                countStore.put(bucketKey, (current == null ? 0L : current) + 1);
                 
-                if (ewmaStore.get(endpoint) == null) {
-                    EndpointPersistentState state = new EndpointPersistentState();
-                    ewmaStore.put(endpoint, mapper.writeValueAsString(state));
+                long timestamp;
+                if (node.has("timestamp") && node.get("timestamp").isTextual()) {
+                    timestamp = Instant.parse(node.get("timestamp").asText()).toEpochMilli();
+                } else if (node.has("ts")) {
+                    timestamp = node.get("ts").asLong();
+                } else {
+                    timestamp = record.timestamp();
                 }
+
+                Double latency = node.has("latency_avg") ? node.get("latency_avg").asDouble() : (node.has("latency") ? node.get("latency").asDouble() : 10.0);
+
+                long windowStart = (timestamp / 1000) * 1000;
+                
+                long currentCount = 0L;
+                try (WindowStoreIterator<Long> iter = countStore.fetch(endpoint, windowStart, windowStart)) {
+                    if (iter.hasNext()) currentCount = iter.next().value;
+                }
+                countStore.put(endpoint, currentCount + 1, windowStart);
+                latencyStore.put(endpoint, latency, windowStart);
+
+                EndpointPersistentState persistentState;
+                String stateStr = ewmaStore.get(endpoint);
+                if (stateStr == null) {
+                    persistentState = new EndpointPersistentState();
+                } else {
+                    persistentState = mapper.readValue(stateStr, EndpointPersistentState.class);
+                }
+
+                Instant eventTime = Instant.ofEpochMilli(timestamp);
+                LocalDateTime ldt = LocalDateTime.ofInstant(eventTime, ZoneOffset.UTC);
+
+                int hour = ldt.getHour();
+                int dayOfWeek = ldt.getDayOfWeek().getValue();
+                double hourSin = Math.sin(2 * Math.PI * hour / 24.0);
+                double hourCos = Math.cos(2 * Math.PI * hour / 24.0);
+                double dowSin = Math.sin(2 * Math.PI * dayOfWeek / 7.0);
+                double dowCos = Math.cos(2 * Math.PI * dayOfWeek / 7.0);
+                double weekOfYear = ldt.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR);
+                double isWeekend = (dayOfWeek >= 6) ? 1.0 : 0.0;
+                double isHoliday = 0.0;
+                double dayOfMonth = ldt.getDayOfMonth();
+
+                Runtime rt = Runtime.getRuntime();
+                long maxMemory = rt.maxMemory();
+                long memoryUsed = rt.totalMemory() - rt.freeMemory();
+                double memoryPressure = maxMemory > 0 ? (double) memoryUsed / maxMemory : 0.0;
+                double cpuUtil = memoryPressure; 
+                double activeConnections = 1.0;
+                double cacheHitRatio = 0.5;
+                double replicaCount = 1.0;
+                double queueDepth = 0.0;
+
+                long t1m = timestamp - 60000;
+                long t5m = timestamp - 300000;
+                long t15m = timestamp - 900000;
+                long t30m = timestamp - 1800000;
+
+                long total1m = 0, total5m = 0, total15m = 0, total30m = 0;
+                long reqMax5m = 0, reqMax15m = 0;
+
+                try (WindowStoreIterator<Long> iter = countStore.fetch(endpoint, t30m, timestamp)) {
+                    while (iter.hasNext()) {
+                        org.apache.kafka.streams.KeyValue<Long, Long> entry = iter.next();
+                        long ts = entry.key;
+                        long val = entry.value;
+                        total30m += val;
+                        
+                        if (ts >= t15m) {
+                            total15m += val;
+                            reqMax15m = Math.max(reqMax15m, val);
+                        }
+                        if (ts >= t5m) {
+                            total5m += val;
+                            reqMax5m = Math.max(reqMax5m, val);
+                        }
+                        if (ts >= t1m) {
+                            total1m += val;
+                        }
+                    }
+                }
+
+                double reqRate1m = total1m / 60.0;
+                double reqRate5m = total5m / 300.0;
+                double reqRate15m = total15m / 900.0;
+                double reqRate30m = total30m / 1800.0;
+
+                List<Double> latencies5m = new ArrayList<>();
+                List<Double> latencies15m = new ArrayList<>();
+                try (WindowStoreIterator<Double> iter = latencyStore.fetch(endpoint, t15m, timestamp)) {
+                    while (iter.hasNext()) {
+                        org.apache.kafka.streams.KeyValue<Long, Double> entry = iter.next();
+                        long ts = entry.key;
+                        double val = entry.value;
+                        latencies15m.add(val);
+                        if (ts >= t5m) {
+                            latencies5m.add(val);
+                        }
+                    }
+                }
+
+                double latencyStd5m = calcStdDev(latencies5m);
+                double latencyStd15m = calcStdDev(latencies15m);
+
+                double ewma03 = persistentState.ewma03;
+                double ewma07 = persistentState.ewma07;
+                
+                if (Double.isNaN(ewma03)) {
+                    ewma03 = reqRate1m;
+                    ewma07 = reqRate1m;
+                } else {
+                    ewma03 = 0.3 * reqRate1m + 0.7 * ewma03;
+                    ewma07 = 0.7 * reqRate1m + 0.3 * ewma07;
+                }
+                persistentState.ewma03 = ewma03;
+                persistentState.ewma07 = ewma07;
+
+                double maxPrev = Math.max(persistentState.prevReqRate1m, 1.0);
+                double rateOfChange = (reqRate1m - persistentState.prevReqRate1m) / maxPrev;
+                persistentState.prevReqRate1m = reqRate1m;
+
+                persistentState.history.add(reqRate1m);
+                if (persistentState.history.size() > 60) {
+                    persistentState.history.remove(0);
+                }
+                double autocorrLag1 = calcAutocorr(persistentState.history);
+
+                ewmaStore.put(endpoint, mapper.writeValueAsString(persistentState));
+
+                FeatureVector fv = new FeatureVector(
+                        endpoint, eventTime,
+                        hourSin, hourCos, dowSin, dowCos, weekOfYear, isWeekend, isHoliday, dayOfMonth,
+                        reqRate1m, reqRate5m, reqRate15m, reqRate30m,
+                        latencyStd5m, latencyStd15m, reqMax5m, reqMax15m,
+                        ewma03, ewma07, rateOfChange, autocorrLag1,
+                        cpuUtil, memoryPressure, activeConnections, cacheHitRatio, replicaCount, queueDepth
+                );
+
+                context.forward(new Record<>(endpoint, mapper.writeValueAsString(fv), eventTime.toEpochMilli()));
 
             } catch (Exception e) {
                 log.warn("Invalid event JSON safely ignored: {}", e.getMessage());
             }
         }
 
-        private void punctuate(long timestamp) {
-            log.info("Punctuation cycle started at: {}", timestamp);
-            Instant now = Instant.now();
-            LocalDateTime ldt = LocalDateTime.ofInstant(now, ZoneOffset.UTC);
-
-            // Compute temporal
-            int hour = ldt.getHour();
-            int dayOfWeek = ldt.getDayOfWeek().getValue();
-            double hourSin = Math.sin(2 * Math.PI * hour / 24.0);
-            double hourCos = Math.cos(2 * Math.PI * hour / 24.0);
-            double dowSin = Math.sin(2 * Math.PI * dayOfWeek / 7.0);
-            double dowCos = Math.cos(2 * Math.PI * dayOfWeek / 7.0);
-            double weekOfYear = ldt.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR);
-            double isWeekend = (dayOfWeek >= 6) ? 1.0 : 0.0;
-            double isHoliday = 0.0;
-            double dayOfMonth = ldt.getDayOfMonth();
-
-            // Infra (MVP)
-            Runtime rt = Runtime.getRuntime();
-            long maxMemory = rt.maxMemory();
-            long memoryUsed = rt.totalMemory() - rt.freeMemory();
-            double memoryPressure = maxMemory > 0 ? (double) memoryUsed / maxMemory : 0.0;
-            double cpuUtil = memoryPressure; // pseudo logic, oshi is normally needed but simplified for MVP without pulling deps heavily
-            double activeConnections = 1.0;
-            double cacheHitRatio = 0.5;
-            double replicaCount = 1.0;
-            double queueDepth = 0.0;
-
-            // Compute statistical per endpoint
-            try (KeyValueIterator<String, String> endpoints = ewmaStore.all()) {
-                while (endpoints.hasNext()) {
-                    org.apache.kafka.streams.KeyValue<String, String> entry = endpoints.next();
-                    String endpoint = entry.key;
-
-                    EndpointPersistentState persistentState = mapper.readValue(entry.value, EndpointPersistentState.class);
-
-                    long total1m = 0, total5m = 0, total15m = 0, total30m = 0;
-                    long nowSec = now.getEpochSecond();
-                    
-                    for (int i = 0; i < 1800; i++) {
-                        long bucket = nowSec - i;
-                        Long val = countStore.get(endpoint + ":" + bucket);
-                        if (val != null) {
-                            total30m += val;
-                            if (i < 900) total15m += val;
-                            if (i < 300) total5m += val;
-                            if (i < 60) total1m += val;
-                        }
-                    }
-
-                    double reqRate1m = total1m / 60.0;
-                    double reqRate5m = total5m / 300.0;
-                    double reqRate15m = total15m / 900.0;
-                    double reqRate30m = total30m / 1800.0;
-
-                    // Simplified stats for MVP after removing WindowStore
-                    double latencyStd5m = 0.1; 
-                    double latencyStd15m = 0.1;
-                    double reqMax5m = total5m; 
-                    double reqMax15m = total15m;
-
-                    double ewma03 = persistentState.ewma03;
-                    double ewma07 = persistentState.ewma07;
-                    
-                    if (Double.isNaN(ewma03)) {
-                        ewma03 = reqRate1m;
-                        ewma07 = reqRate1m;
-                    } else {
-                        ewma03 = 0.3 * reqRate1m + 0.7 * ewma03;
-                        ewma07 = 0.7 * reqRate1m + 0.3 * ewma07;
-                    }
-                    persistentState.ewma03 = ewma03;
-                    persistentState.ewma07 = ewma07;
-
-                    double maxPrev = Math.max(persistentState.prevReqRate1m, 1.0);
-                    double rateOfChange = (reqRate1m - persistentState.prevReqRate1m) / maxPrev;
-                    persistentState.prevReqRate1m = reqRate1m;
-
-                    persistentState.history.add(reqRate1m);
-                    if (persistentState.history.size() > 60) {
-                        persistentState.history.remove(0);
-                    }
-                    double autocorrLag1 = calcAutocorr(persistentState.history);
-
-                    ewmaStore.put(endpoint, mapper.writeValueAsString(persistentState));
-
-                    FeatureVector fv = new FeatureVector(
-                            endpoint, now,
-                            hourSin, hourCos, dowSin, dowCos, weekOfYear, isWeekend, isHoliday, dayOfMonth,
-                            reqRate1m, reqRate5m, reqRate15m, reqRate30m,
-                            latencyStd5m, latencyStd15m, reqMax5m, reqMax15m,
-                            ewma03, ewma07, rateOfChange, autocorrLag1,
-                            cpuUtil, memoryPressure, activeConnections, cacheHitRatio, replicaCount, queueDepth
-                    );
-
-                    context.forward(new Record<>(endpoint, mapper.writeValueAsString(fv), now.toEpochMilli()));
-                }
-            } catch (Exception e) {
-                log.error("Error computing features", e);
-            }
-        }
-
-        private double calcStdDev(List<Long> values) {
+        private double calcStdDev(List<Double> values) {
             if (values.size() < 2) return 0.0;
             double mean = values.stream().mapToDouble(v -> v).average().orElse(0.0);
             double sumSq = values.stream().mapToDouble(v -> Math.pow(v - mean, 2)).sum();

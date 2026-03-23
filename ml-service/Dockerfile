@@ -7,7 +7,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY models/ /app/models/
+COPY model_weights/ /app/models/
 COPY service/ /app/service/
 COPY scripts/ /app/scripts/
 

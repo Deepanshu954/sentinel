@@ -11,7 +11,6 @@ import org.springframework.web.client.RestClient;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 @Component
@@ -36,13 +35,17 @@ public class MLServiceClient {
                 .build();
     }
 
+    public record PredictRequest(List<Double> features) {}
+
     public Optional<PredictionResponse> predict(List<Double> features) {
         for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
+                logger.debug("Sending prediction request top features: {}", features.subList(0, Math.min(5, features.size())));
+                
                 PredictionResponse response = restClient.post()
                         .uri("/predict")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body(Map.of("features", features))
+                        .body(new PredictRequest(features))
                         .retrieve()
                         .body(PredictionResponse.class);
                 return Optional.ofNullable(response);

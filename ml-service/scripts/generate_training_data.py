@@ -9,7 +9,7 @@ def generate_data():
     dates = pd.date_range(start="2024-01-01", periods=2592000, freq='s')
     
     print("Modeling synthetic request rates...")
-    req_count = np.full(2592000, 10.0)
+    req_count = np.full(2592000, 1000.0)
     
     df = pd.DataFrame(index=dates)
     

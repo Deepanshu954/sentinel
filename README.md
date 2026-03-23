@@ -48,35 +48,39 @@ bash launch.sh
                                   └───────────────────────┘
 ```
 
-## Quick Start
+## 🚀 Execution Order (How to run)
 
-### Prerequisites
+To properly start and test the Sentinel project from scratch, run the scripts in this exact order:
 
-- Docker Desktop (with Docker Compose v2)
-- Python 3.9+
-- ~3 GB free RAM
-
-### Launch
-
+### 1. Build and Setup Environment
 ```bash
-git clone https://github.com/Deepanshu954/sentinel.git
-cd sentinel
+bash scripts/build.sh
+```
+**What it does:** Prepares your local host environment. It creates an isolated Python virtual environment (bypassing macOS SIP restrictions), installs strict ML pip dependencies, and compiles the Java Spring Boot orchestrator via Maven.
+
+### 2. Train the Machine Learning Models
+```bash
+bash scripts/train.sh
+```
+**What it does:** Downloads and prepares the Azure/Wikipedia telemetry datasets, scales the features, and trains the XGBoost Regressor (for traffic prediction) and the Isolation Forest (for anomaly detection). The trained models are saved into `ml-service/model_weights/`.
+
+### 3. Deploy the Platform
+```bash
 bash launch.sh
 ```
+**What it does:** The master orchestration script. It loads environment variables, spins up all 9 services concurrently via Docker Compose, and features a robust retry loop that waits until every single container (from Kafka KRaft to the Python Uvicorn server) reports a `200 OK` health status.
 
-The launch script will:
-1. ✅ Check system prerequisites
-2. ✅ Train ML models (if missing)
-3. ✅ Build & start all 9 services
-4. ✅ Run health checks
-5. ✅ Execute 30-point validation
-6. ✅ Display access URLs
+### 4. Validate the Architecture
+```bash
+bash scripts/validate_sentinel.sh
+```
+**What it does:** Executes a rigorous 30-point automated test suite. It generates JWT tokens, tests Redis rate-limiting (HTTP 429), traces feature vectors through the Kafka pub/sub queue, verifies InfluxDB batch writes, and confirms Prometheus actually scrapes the dynamically registered components. (Aim for 30/30!).
 
-### Run Demo
-
+### 5. Run the Interactive Live Demo
 ```bash
 bash scripts/demo.sh
 ```
+**What it does:** An interactive CLI load-testing dashboard. It floods the gateway with live synthetic traffic using `hey` in three phases (Baseline, Surge, Recovery) and live-prints the Orchestrator's AI-driven scaling actions (e.g., `SCALE_OUT`, `HOLD`) and anomaly detections directly to your terminal.
 
 ---
 
@@ -171,12 +175,14 @@ sentinel/
 │   ├── grafana/                # Dashboard + datasource configs
 │   └── prometheus/             # Prometheus scrape config
 ├── scripts/
-│   ├── validate_sentinel.sh    # 30-point validation suite
-│   ├── demo.sh                 # Live demo script
-│   ├── train_models.py         # ML model trainer
-│   └── generate_jwt.py         # JWT token generator
+│   ├── build.sh                # Compiles Java code and sets up Python environment
+│   ├── train.sh                # Downloads data and trains XGBoost/Isolation Forest models
+│   ├── validate_sentinel.sh    # 30-point pipeline validation suite
+│   ├── demo.sh                 # Live traffic simulation dashboard
+│   ├── prepare_dataset.py      # Cleans Azure/Wiki datasets bounds
+│   └── generate_jwt.py         # JWT token generator for auth
 ├── docker-compose.yml          # 9-service stack
-├── launch.sh                   # One-command launcher
+├── launch.sh                   # Master Docker deployment script
 ├── sentinel.sh                 # CLI utility
 ├── Makefile                    # Make targets
 ├── DOCS.md                     # Complete developer docs

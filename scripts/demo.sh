@@ -1,125 +1,103 @@
 #!/bin/bash
-# ╔══════════════════════════════════════════════════════════════════╗
-# ║                     SENTINEL — Live Demo                        ║
-# ╚══════════════════════════════════════════════════════════════════╝
+# scripts/demo.sh — Sentinel Live Demo
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 CYAN='\033[0;36m'
-BOLD='\033[1m'
-DIM='\033[2m'
 NC='\033[0m'
+BOLD='\033[1m'
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-cd "$PROJECT_DIR"
+echo -e "${CYAN}${BOLD}=== SENTINEL LIVE DEMO — AI-Powered API Auto-Scaling ===${NC}\n"
 
-echo -e "\n${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}${BOLD}║           SENTINEL — Live Demo                   ║${NC}"
-echo -e "${CYAN}${BOLD}╚══════════════════════════════════════════════════╝${NC}\n"
-
-# ── Step 1: Generate JWT ─────────────────────────────────────────
-echo -e "${BLUE}${BOLD}[1/5]${NC} ${BOLD}Generating JWT Token${NC}"
-echo -e "${DIM}$(printf '%.0s─' {1..50})${NC}"
-
-TOKEN=$(python3 scripts/generate_jwt.py --client-id demo-user 2>/dev/null | tr -d '[:space:]')
-if [ -n "$TOKEN" ]; then
-    echo -e "  ${GREEN}✓${NC} JWT generated: ${DIM}${TOKEN:0:40}...${NC}"
-else
-    echo -e "  ${RED}✗${NC} JWT generation failed"
+# 1. Check if 9 services are running
+if ! command -v docker-compose >/dev/null 2>&1 || ! [[ $(docker-compose ps | wc -l) -ge 10 ]]; then
+    echo -e "${RED}Services not running. Run ./launch.sh first.${NC}"
     exit 1
 fi
 
-# ── Step 2: Send Test Requests ───────────────────────────────────
-echo -e "\n${BLUE}${BOLD}[2/5]${NC} ${BOLD}Sending 30 API Requests${NC}"
-echo -e "${DIM}$(printf '%.0s─' {1..50})${NC}"
-
-SUCCESS=0
-FAILED=0
-for i in $(seq 1 30); do
-    STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-        -H "Authorization: Bearer $TOKEN" \
-        http://localhost:8080/api/test 2>/dev/null)
-    if [ "$STATUS" = "200" ] || [ "$STATUS" = "502" ]; then
-        SUCCESS=$((SUCCESS + 1))
-    else
-        FAILED=$((FAILED + 1))
-    fi
-    printf "\r  Sending request %d/30... " "$i"
-    sleep 0.1
-done
-echo ""
-echo -e "  ${GREEN}✓${NC} ${SUCCESS} succeeded, ${FAILED} failed (502 = auth passed, no upstream)"
-
-# ── Step 3: Kafka Metrics ────────────────────────────────────────
-echo -e "\n${BLUE}${BOLD}[3/5]${NC} ${BOLD}Kafka Pipeline Status${NC}"
-echo -e "${DIM}$(printf '%.0s─' {1..50})${NC}"
-
-EVENTS=$(docker exec sentinel-kafka kafka-get-offsets --bootstrap-server localhost:9092 --topic api.events 2>/dev/null | awk -F: '{print $3}')
-FEATURES=$(docker exec sentinel-kafka kafka-get-offsets --bootstrap-server localhost:9092 --topic api.features 2>/dev/null | awk -F: '{print $3}')
-
-echo -e "  ${GREEN}✓${NC} api.events:   ${BOLD}${EVENTS:-0}${NC} messages"
-echo -e "  ${GREEN}✓${NC} api.features: ${BOLD}${FEATURES:-0}${NC} feature vectors"
-
-TOPICS=$(docker exec sentinel-kafka kafka-topics --bootstrap-server localhost:9092 --list 2>/dev/null | grep -v "^__" | sort)
-echo -e "  ${CYAN}→${NC} Topics: $(echo $TOPICS | tr '\n' ', ')"
-
-# ── Step 4: ML Prediction ────────────────────────────────────────
-echo -e "\n${BLUE}${BOLD}[4/5]${NC} ${BOLD}ML Service Prediction${NC}"
-echo -e "${DIM}$(printf '%.0s─' {1..50})${NC}"
-
-PREDICT=$(curl -s -X POST http://localhost:8000/predict \
-  -H "Content-Type: application/json" \
-  -d '{"features":[0.707,0.707,0.0,1.0,12.0,0.0,0.0,20.0,100.0,95.0,90.0,85.0,5.5,6.0,150.0,160.0,92.0,94.0,0.15,0.75,65.5,70.2,200.0,0.88,2.0,5.0]}' 2>/dev/null)
-
-if echo "$PREDICT" | grep -q "predicted_req_rate"; then
-    PRED_RATE=$(echo "$PREDICT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(f\"{d['predicted_req_rate']:.2f}\")" 2>/dev/null)
-    CONFIDENCE=$(echo "$PREDICT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(f\"{d['confidence']:.4f}\")" 2>/dev/null)
-    ACTION=$(echo "$PREDICT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['action'])" 2>/dev/null)
-    LOWER=$(echo "$PREDICT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(f\"{d['lower_bound']:.2f}\")" 2>/dev/null)
-    UPPER=$(echo "$PREDICT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(f\"{d['upper_bound']:.2f}\")" 2>/dev/null)
-
-    echo -e "  ${GREEN}✓${NC} Predicted Rate:  ${BOLD}${PRED_RATE}${NC} req/s"
-    echo -e "  ${GREEN}✓${NC} Bounds:          [${LOWER}, ${UPPER}]"
-    echo -e "  ${GREEN}✓${NC} Confidence:      ${BOLD}${CONFIDENCE}${NC}"
-    if [ "$ACTION" = "DISPATCH" ]; then
-        echo -e "  ${GREEN}✓${NC} Decision:        ${GREEN}${BOLD}${ACTION}${NC} — scaling recommended"
-    else
-        echo -e "  ${YELLOW}✓${NC} Decision:        ${YELLOW}${BOLD}${ACTION}${NC} — holding steady"
-    fi
-else
-    echo -e "  ${RED}✗${NC} Prediction failed: $PREDICT"
+raw_status=$(docker-compose ps --format "table {{.Service}}\t{{.State}}\t{{.Status}}" | tail -n +2)
+if echo "$raw_status" | grep -i -q "restarting\|exited\|starting\|unhealthy"; then
+    echo -e "${RED}Services not healthy. Run ./launch.sh first.${NC}"
+    exit 1
 fi
 
-# ── Step 5: Anomaly Detection ────────────────────────────────────
-echo -e "\n${BLUE}${BOLD}[5/5]${NC} ${BOLD}Anomaly Detection${NC}"
-echo -e "${DIM}$(printf '%.0s─' {1..50})${NC}"
-
-ANOMALY=$(curl -s -X POST http://localhost:8000/anomaly \
-  -H "Content-Type: application/json" \
-  -d '{"features":[50,50,50,50,120,0,0,150,1000,900,800,700,55,60,1500,1600,920,940,1.5,7.5,95.5,92.2,2000,0.2,10.0,50.0]}' 2>/dev/null)
-
-if echo "$ANOMALY" | grep -q "is_anomaly"; then
-    IS_ANOM=$(echo "$ANOMALY" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['is_anomaly'])" 2>/dev/null)
-    SCORE=$(echo "$ANOMALY" | python3 -c "import json,sys; d=json.load(sys.stdin); print(f\"{d['anomaly_score']:.4f}\")" 2>/dev/null)
-    INTERP=$(echo "$ANOMALY" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['interpretation'])" 2>/dev/null)
-
-    if [ "$IS_ANOM" = "True" ]; then
-        echo -e "  ${RED}⚠${NC}  Anomaly:  ${RED}${BOLD}DETECTED${NC}"
-    else
-        echo -e "  ${GREEN}✓${NC} Anomaly:  ${GREEN}${BOLD}NOT DETECTED${NC}"
-    fi
-    echo -e "  ${CYAN}→${NC} Score: ${SCORE}  Interpretation: ${BOLD}${INTERP}${NC}"
-else
-    echo -e "  ${RED}✗${NC} Anomaly detection failed"
+# 2. Check hey
+if ! command -v hey >/dev/null 2>&1; then
+    echo -e "${YELLOW}hey not found. Installing via brew...${NC}"
+    brew install hey || exit 1
 fi
 
-# ── Summary ──────────────────────────────────────────────────────
-echo -e "\n${GREEN}${BOLD}╔══════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}${BOLD}║              Demo Complete!                       ║${NC}"
-echo -e "${GREEN}${BOLD}╠══════════════════════════════════════════════════╣${NC}"
-echo -e "${GREEN}${BOLD}║  Dashboard:  ${NC}${BOLD}http://localhost:3000${GREEN}${BOLD}                ║${NC}"
-echo -e "${GREEN}${BOLD}║  Login:      ${NC}${BOLD}admin / sentinel${GREEN}${BOLD}                    ║${NC}"
-echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════╝${NC}\n"
+# 3. Generate Token
+if ! command -v python3 >/dev/null 2>&1; then echo "python3 required"; exit 1; fi
+if [ -f /tmp/sentinel-venv/bin/activate ]; then source /tmp/sentinel-venv/bin/activate; fi
+TOKEN=$(python3 scripts/generate_jwt.py 2>/dev/null | tr -d '[:space:]')
+if [ -z "$TOKEN" ]; then
+    # Fallback if the script needs a client parameter
+    TOKEN=$(python3 scripts/generate_jwt.py --client-id demo-client 2>/dev/null | tr -d '[:space:]')
+fi
+
+# 4. Starting sequence
+echo -e "\n${BOLD}${GREEN}Open http://localhost:3000 (admin/sentinel) to watch Grafana${NC}\n"
+
+countdown() {
+    local phase=$1
+    local dur=$2
+    local query_desc=$3
+    echo -e "${CYAN}=== Phase $phase: $query_desc ===${NC}"
+    for (( i=dur; i>0; i-- )); do
+        printf "\r${YELLOW}Time remaining: %2ds${NC}" "$i"
+        sleep 1
+    done
+    echo -e "\n"
+}
+
+# 5. Execute Load Phases
+
+# Phase 1: Baseline 100 req/s for 30s
+# hey -z 30s -q 2 -c 50 = 100 rps total approx
+hey -z 30s -q 2 -c 50 -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/test > /dev/null 2>&1 &
+PID1=$!
+countdown 1 30 "Baseline (100 req/s)"
+wait $PID1
+
+# Phase 2: Surge 3000 req/s for 60s
+echo -e "${BOLD}${RED}>>> SURGE INITIATED. WATCH GRAFANA NOW. <<<${NC}"
+hey -z 60s -c 200 -q 15 -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/test > /dev/null 2>&1 &
+PID2=$!
+countdown 2 60 "Surge (3000 req/s)"
+wait $PID2
+
+# Phase 3: Recovery 100 req/s for 20s
+hey -z 20s -q 2 -c 50 -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/test > /dev/null 2>&1 &
+PID3=$!
+countdown 3 20 "Recovery (100 req/s)"
+wait $PID3
+
+echo -e "${CYAN}Fetch Action Decisions...${NC}"
+ACTIONS_JSON=$(curl -s http://localhost:8090/api/actions)
+
+DISPATCH_COUNT=$(echo "$ACTIONS_JSON" | grep -o '"actionType":"DISPATCH"' | wc -l | tr -d ' ')
+HOLD_COUNT=$(echo "$ACTIONS_JSON" | grep -o '"actionType":"HOLD"' | wc -l | tr -d ' ')
+
+echo -e "\n${BOLD}=== LAST 5 SCALING DECISIONS ===${NC}"
+# Use python to format the JSON explicitly into last 5 
+echo "$ACTIONS_JSON" | python3 -c '
+import sys, json;
+try:
+    data = json.load(sys.stdin)
+    if isinstance(data, list):
+        for item in data[-5:]:
+            print(f"[{item.get(\"timestamp\", \"\")}] ACTION: {item.get(\"actionType\")} | CONFIDENCE: {item.get(\"confidence\", 0):.2f} | RATE: {item.get(\"predictedRate\", 0):.0f} | REASON: {item.get(\"reason\")}")
+    else:
+        print("No valid actions returned.")
+except:
+    print("Could not parse actions.")
+'
+
+echo -e "\n${BOLD}${GREEN}=== SUMMARY ===${NC}"
+echo -e "Total Requests: ~185,000"
+echo -e "Total DISPATCH actions: ${BOLD}${DISPATCH_COUNT}${NC}"
+echo -e "Total HOLD actions:     ${BOLD}${HOLD_COUNT}${NC}"
+
+echo -e "\n${BOLD}${GREEN}Demo complete.${NC}\n"

@@ -2,7 +2,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
-from .models import FeatureInput, PredictionResponse, AnomalyResponse, HealthResponse
+from pydantic import BaseModel
+from typing import List, Optional
 import xgboost as xgb
 import pickle
 import numpy as np
@@ -19,7 +20,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Thread-safe global model references evaluated at startup only
+# Pydantic Schemas
+class FeatureInput(BaseModel):
+    features: List[float]
+
+class PredictionResponse(BaseModel):
+    predicted_req_rate: float
+    lower_bound: float
+    upper_bound: float
+    confidence: float
+    action: str
+    threshold_used: float
+
+class AnomalyResponse(BaseModel):
+    is_anomaly: bool
+    anomaly_score: float
+    interpretation: str
+
+class HealthResponse(BaseModel):
+    status: str
+    models_loaded: bool
+    model_count: int
+
+# Thread-safe global model references
 models = {
     "main": None,
     "lower": None,
@@ -35,41 +58,49 @@ ANOMALIES_DETECTED = Counter("sentinel_ml_anomalies_detected_total", "Total anom
 
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.75"))
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 @app.on_event("startup")
 def load_models():
+    # Resolve correct parent directory regardless of local vs docker context
+    root_dir = os.path.dirname(BASE_DIR)
+    # Inside docker compose this maps to /app/models
+    main_model_path = os.path.join(root_dir, "models", "xgb_model.json")
+    lower_model_path = os.path.join(root_dir, "models", "xgb_lower.json")
+    upper_model_path = os.path.join(root_dir, "models", "xgb_upper.json")
+    iso_model_path = os.path.join(root_dir, "models", "isolation_forest.pkl")
+        
     try:
-        main_model = xgb.XGBRegressor()
-        main_model.load_model("models/xgb_model.json")
-        models["main"] = main_model
-        
-        lower_model = xgb.XGBRegressor()
-        lower_model.load_model("models/xgb_lower.json")
-        models["lower"] = lower_model
-        
-        upper_model = xgb.XGBRegressor()
-        upper_model.load_model("models/xgb_upper.json")
-        models["upper"] = upper_model
-        
-        with open("models/isolation_forest.pkl", "rb") as f:
-            models["iforest"] = pickle.load(f)
+        if os.path.exists(main_model_path):
+            m = xgb.XGBRegressor()
+            m.load_model(main_model_path)
+            m.load_model(main_model_path)
+            models["main"] = m
             
-        print("All models loaded successfully!")
+        if os.path.exists(lower_model_path):
+            l = xgb.XGBRegressor()
+            l.load_model(lower_model_path)
+            models["lower"] = l
+            
+        if os.path.exists(upper_model_path):
+            u = xgb.XGBRegressor()
+            u.load_model(upper_model_path)
+            models["upper"] = u
+            
+        if os.path.exists(iso_model_path):
+            with open(iso_model_path, "rb") as f:
+                models["iforest"] = pickle.load(f)
+                
     except Exception as e:
-        print(f"Error loading models: {e}. Starting anyway to serve 503 errors gracefully.")
+        print(f"Error loading models: {e}")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    return JSONResponse(
-        status_code=500,
-        content={"error": str(exc)},
-    )
+    return JSONResponse(status_code=500, content={"error": str(exc)})
 
 @app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError):
-    return JSONResponse(
-        status_code=400,
-        content={"error": str(exc)},
-    )
+    return JSONResponse(status_code=400, content={"error": str(exc)})
 
 @app.post("/predict", response_model=PredictionResponse)
 def predict(payload: FeatureInput):
@@ -78,24 +109,23 @@ def predict(payload: FeatureInput):
         
     start_time = time.time()
     
-    # Dimensions match inference payload -> (1, 26) Numpy array DMatrix conversion auto-wrapped by XGBRegressor
+    if len(payload.features) != 26:
+        return JSONResponse(status_code=422, content={"error": f"Must provide exactly 26 features. Got {len(payload.features)}."})
+        
     X = np.array(payload.features).reshape(1, -1)
-    
     PREDICTIONS_TOTAL.inc()
     
     main_pred = float(models["main"].predict(X)[0])
     lower_pred = float(models["lower"].predict(X)[0])
     upper_pred = float(models["upper"].predict(X)[0])
     
-    # Bounds logic
+    # Mathematical confidence bounded [0, 1]
     diff = upper_pred - lower_pred
-    confidence = 1.0 - (diff / max(main_pred, 1.0))
-    confidence = max(0.0, min(1.0, confidence))
+    C = 1.0 - (diff / max(main_pred, 1.0))
+    C = max(0.0, min(1.0, float(C)))
     
-    print(f"Prediction: {main_pred:.2f}, Confidence: {confidence:.4f}, Features: {payload.features[:5]}...", flush=True)
-    
-    CONFIDENCE_SCORE.set(confidence)
-    action = "DISPATCH" if confidence >= CONFIDENCE_THRESHOLD else "HOLD"
+    CONFIDENCE_SCORE.set(C)
+    action = "DISPATCH" if C >= CONFIDENCE_THRESHOLD else "HOLD"
     
     latency = time.time() - start_time
     PREDICTION_LATENCY.observe(latency)
@@ -104,7 +134,7 @@ def predict(payload: FeatureInput):
         predicted_req_rate=main_pred,
         lower_bound=lower_pred,
         upper_bound=upper_pred,
-        confidence=confidence,
+        confidence=C,
         action=action,
         threshold_used=CONFIDENCE_THRESHOLD
     )
@@ -114,14 +144,19 @@ def detect_anomaly(payload: FeatureInput):
     if not models["iforest"]:
         return JSONResponse(status_code=503, content={"error": "Isolation Forest model is not loaded."})
         
+    if len(payload.features) != 26:
+        return JSONResponse(status_code=422, content={"error": f"Must provide exactly 26 features. Got {len(payload.features)}."})
+        
     X = np.array(payload.features).reshape(1, -1)
-    score = float(models["iforest"].decision_function(X)[0])
     
-    if score < -0.1:
+    # isolation_forest.score_samples(X) 
+    score = float(models["iforest"].score_samples(X)[0])
+    
+    if score > -0.1:
         interpretation = "anomaly"
         is_anomaly = True
         ANOMALIES_DETECTED.inc()
-    elif score >= -0.1 and score <= 0.0:
+    elif score > -0.2:
         interpretation = "suspicious"
         is_anomaly = False
     else:
@@ -136,11 +171,11 @@ def detect_anomaly(payload: FeatureInput):
 
 @app.get("/health", response_model=HealthResponse)
 def health():
-    loaded = all(models.values())
+    count = sum(1 for m in models.values() if m is not None)
     return HealthResponse(
         status="ok",
-        models_loaded=loaded,
-        model_versions={"xgboost": xgb.__version__}
+        models_loaded=(count == 4),
+        model_count=count
     )
 
 @app.get("/metrics")

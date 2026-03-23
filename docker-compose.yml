@@ -9,6 +9,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-sentinel-super-secret-jwt-key-change-in-prod}
       - REDIS_ADDR=redis:6379
       - KAFKA_BROKERS=kafka:9092
+      - TARGET_URL=${TARGET_URL}
       - INFLUX_URL=http://influxdb:8086
       - INFLUX_TOKEN=sentinel-influx-admin-token
       - INFLUX_ORG=sentinel
@@ -143,7 +144,7 @@ services:
     networks:
       - sentinel-network
     volumes:
-      - ./ml-service/models:/app/models
+      - ./ml-service/model_weights:/app/models
     restart: unless-stopped
 
   # ─── Orchestrator (Spring Boot) ──────────────────────────────────────────────

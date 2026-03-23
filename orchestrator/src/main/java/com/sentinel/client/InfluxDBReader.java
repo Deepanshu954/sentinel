@@ -52,7 +52,6 @@ public class InfluxDBReader {
                 "from(bucket: \"%s\") " +
                 "|> range(start: -3m) " +
                 "|> filter(fn: (r) => r[\"_measurement\"] == \"api_features\") " +
-                "|> filter(fn: (r) => r[\"endpoint\"] == \"/api/products\") " +
                 "|> last() " + 
                 "|> pivot(rowKey:[\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")", bucket);
                 
@@ -80,6 +79,9 @@ public class InfluxDBReader {
                 } else {
                     vector.add(0.0);
                 }
+            }
+            if (vector.size() != 26) {
+                return Optional.empty();
             }
             return Optional.of(vector);
         } catch (Exception e) {

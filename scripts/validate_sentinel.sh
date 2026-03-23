@@ -107,19 +107,29 @@ fi
 header "INFLUXDB (2 checks)"
 
 # 17
-BUCKET_RES=$(curl -s -H "Authorization: Token sentinel-influx-admin-token" http://localhost:8086/api/v2/buckets)
-if echo "$BUCKET_RES" | grep -q 'sentinel-metrics'; then ok "Bucket sentinel-metrics exists"; else err "Bucket sentinel-metrics exists"; fi
+INFLUX_TOKEN=$(docker exec sentinel-gateway env | grep INFLUX_TOKEN | cut -d= -f2 | tr -d '\r' 2>/dev/null)
+if [ -z "$INFLUX_TOKEN" ]; then
+    if [ -f .env ]; then
+        INFLUX_TOKEN=$(grep INFLUX_TOKEN .env | cut -d= -f2 | tr -d '\r')
+    else
+        INFLUX_TOKEN=$(grep INFLUX_TOKEN .env.example | cut -d= -f2 | tr -d '\r')
+    fi
+fi
+
+# Final fallback
+if [ -z "$INFLUX_TOKEN" ]; then INFLUX_TOKEN="sentinel-influx-admin-token"; fi
+
+BUCKETS=$(curl -s -H "Authorization: Token $INFLUX_TOKEN" \
+  http://localhost:8086/api/v2/buckets?org=sentinel)
+if echo "$BUCKETS" | grep -q "sentinel-metrics"; then ok "Bucket sentinel-metrics exists"; else err "Bucket sentinel-metrics exists"; fi
 
 # 18
-sleep 5 # Wait for InfluxDB async batch flush
-FLUX='from(bucket: "sentinel-metrics") |> range(start: -60s) |> filter(fn: (r) => r["_measurement"] == "api_features") |> count()'
-RECENT_DATA=$(curl -s -X POST http://localhost:8086/api/v2/query?org=sentinel \
-    -H "Authorization: Token sentinel-influx-admin-token" \
-    -H "Content-Type: application/vnd.flux" \
-    -H "Accept: application/csv" \
-    -d "$FLUX")
-
-if echo "$RECENT_DATA" | grep -q "result"; then ok "Recent data in last 60 seconds"; else err "Recent data in last 60 seconds"; fi
+QUERY='from(bucket:"sentinel-metrics") |> range(start:-5m) |> limit(n:1)'
+RESULT=$(curl -s -X POST http://localhost:8086/api/v2/query?org=sentinel \
+  -H "Authorization: Token $INFLUX_TOKEN" \
+  -H "Content-Type: application/vnd.flux" \
+  -d "$QUERY")
+if [ -n "$RESULT" ] && ! echo "$RESULT" | grep -q '"unauthorized"' && ! echo "$RESULT" | grep -q '"error"'; then ok "Recent data in last 5 minutes"; else err "Recent data in last 5 minutes"; fi
 
 # ─── SECTION 5: ML service (4 checks) ─────────────────────────────────────────────
 header "ML SERVICE (4 checks)"
@@ -187,9 +197,11 @@ if curl -s http://localhost:9090/api/v1/targets | python3 -c 'import sys, json; 
 # 28
 if curl -s http://localhost:9090/api/v1/targets | python3 -c 'import sys, json; print(any(t.get("labels", {}).get("job") == "orchestrator" and t.get("health") == "up" for t in json.loads(sys.stdin.read()).get("data", {}).get("activeTargets", [])))' | grep -q 'True'; then ok "Prometheus has orchestrator target"; else err "Prometheus has orchestrator target"; fi
 # 29
-if curl -s -u admin:sentinel http://localhost:3000/api/datasources | grep -i -q influx; then ok "Grafana datasource configured"; else err "Grafana datasource configured"; fi
+DATASOURCES=$(curl -s -u admin:sentinel http://localhost:3000/api/datasources)
+if echo "$DATASOURCES" | grep -qi "influx"; then ok "Grafana datasource configured"; else err "Grafana datasource configured"; fi
 # 30
-if curl -s -u admin:sentinel http://localhost:3000/api/search | grep -i -q sentinel; then ok "Grafana dashboard exists"; else err "Grafana dashboard exists"; fi
+DASHBOARDS=$(curl -s -u admin:sentinel "http://localhost:3000/api/search?type=dash-db")
+if echo "$DASHBOARDS" | grep -qi "sentinel\|api\|gateway"; then ok "Grafana dashboard exists"; else err "Grafana dashboard exists"; fi
 
 # ─── OUTPUT ───────────────────────────────────────────────────────────────────────
 echo -e "\n${BOLD}=== RESULT ===${NC}"

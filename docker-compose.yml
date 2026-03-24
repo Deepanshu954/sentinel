@@ -11,7 +11,7 @@ services:
       - KAFKA_BROKERS=kafka:9092
       - TARGET_URL=${TARGET_URL}
       - INFLUX_URL=http://influxdb:8086
-      - INFLUX_TOKEN=sentinel-influx-admin-token
+      - INFLUX_TOKEN=${INFLUX_TOKEN:-sentinel-influx-admin-token}
       - INFLUX_ORG=sentinel
       - INFLUX_BUCKET=sentinel-metrics
       - RATE_LIMIT_PER_MIN=${RATE_LIMIT_PER_MIN}
@@ -132,7 +132,7 @@ services:
       - "8000:8000"
     environment:
       - INFLUX_URL=http://influxdb:8086
-      - INFLUX_TOKEN=sentinel-influx-admin-token
+      - INFLUX_TOKEN=${INFLUX_TOKEN:-sentinel-influx-admin-token}
       - INFLUX_ORG=sentinel
       - INFLUX_BUCKET=sentinel-metrics
       - KAFKA_BROKERS=kafka:9092
@@ -160,7 +160,7 @@ services:
       - REDIS_ADDR=${REDIS_ADDR:-redis:6379}
       - KAFKA_BROKERS=${KAFKA_BROKERS:-kafka:9092}
       - INFLUX_URL=http://influxdb:8086
-      - INFLUX_TOKEN=sentinel-influx-admin-token
+      - INFLUX_TOKEN=${INFLUX_TOKEN:-sentinel-influx-admin-token}
       - INFLUX_ORG=sentinel
       - INFLUX_BUCKET=sentinel-metrics
       - ML_SERVICE_URL=http://ml-service:8000

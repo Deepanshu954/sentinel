@@ -10,17 +10,25 @@ BOLD='\033[1m'
 
 echo -e "${CYAN}${BOLD}=== SENTINEL LIVE DEMO — AI-Powered API Auto-Scaling ===${NC}\n"
 
-# 1. Check if 9 services are running
-if ! command -v docker-compose >/dev/null 2>&1 || ! [[ $(docker-compose ps | wc -l) -ge 10 ]]; then
-    echo -e "${RED}Services not running. Run ./launch.sh first.${NC}"
-    exit 1
-fi
+# 1. Check if services are healthy
+echo -e "${CYAN}Checking if services are healthy...${NC}"
+HEALTHY=true
+# 1 Gateway
+if ! curl -s http://localhost:8080/health | grep -q "ok"; then HEALTHY=false; fi
+# 2 ML service
+if ! curl -s http://localhost:8000/health | grep -q "status"; then HEALTHY=false; fi
+# 3 Orchestrator
+if ! curl -s http://localhost:8090/actuator/health | grep -q "UP"; then HEALTHY=false; fi
+# 4 InfluxDB
+if ! curl -s http://localhost:8086/health | grep -i -q "pass"; then HEALTHY=false; fi
+# 5 Kafka Topic Check
+if ! docker exec sentinel-kafka kafka-topics --list --bootstrap-server localhost:9092 2>/dev/null | grep -q "api.events"; then HEALTHY=false; fi
 
-raw_status=$(docker-compose ps --format "table {{.Service}}\t{{.State}}\t{{.Status}}" | tail -n +2)
-if echo "$raw_status" | grep -i -q "restarting\|exited\|starting\|unhealthy"; then
-    echo -e "${RED}Services not healthy. Run ./launch.sh first.${NC}"
+if [ "$HEALTHY" = false ]; then
+    echo -e "${RED}Some services are not healthy or ready. Run ./scripts/validate_sentinel.sh to diagnose.${NC}"
     exit 1
 fi
+echo -e "${GREEN}All core services are healthy!${NC}"
 
 # 2. Check hey
 if ! command -v hey >/dev/null 2>&1; then
@@ -82,18 +90,18 @@ HOLD_COUNT=$(echo "$ACTIONS_JSON" | grep -o '"actionType":"HOLD"' | wc -l | tr -
 
 echo -e "\n${BOLD}=== LAST 5 SCALING DECISIONS ===${NC}"
 # Use python to format the JSON explicitly into last 5 
-echo "$ACTIONS_JSON" | python3 -c '
-import sys, json;
+echo "$ACTIONS_JSON" | python3 << 'EOF'
+import sys, json
 try:
     data = json.load(sys.stdin)
     if isinstance(data, list):
         for item in data[-5:]:
-            print(f"[{item.get(\"timestamp\", \"\")}] ACTION: {item.get(\"actionType\")} | CONFIDENCE: {item.get(\"confidence\", 0):.2f} | RATE: {item.get(\"predictedRate\", 0):.0f} | REASON: {item.get(\"reason\")}")
+            print(f"[{item.get('timestamp', '')}] ACTION: {item.get('actionType')} | CONFIDENCE: {item.get('confidence', 0):.2f} | RATE: {item.get('predictedRate', 0):.0f} | REASON: {item.get('reason')}")
     else:
         print("No valid actions returned.")
-except:
-    print("Could not parse actions.")
-'
+except Exception as e:
+    print(f"Could not parse actions: {e}")
+EOF
 
 echo -e "\n${BOLD}${GREEN}=== SUMMARY ===${NC}"
 echo -e "Total Requests: ~185,000"

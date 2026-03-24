@@ -24,7 +24,21 @@ ml-service/libomp.tar.gz
 
 # ── Environment ──────────────────────────────────────
 .env
+sentinel.env
+myenv
 !.env.example
+
+# ── Python ───────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+myenv/
+*.egg-info/
+dist/
+build/
+*.log
 
 # ── Validation / test outputs ────────────────────────
 validation_*.txt
@@ -32,11 +46,11 @@ train_log.txt
 e2e_test_log.txt
 e2e_report.md
 orchestrator.log
+*.log
 
 # ── Temp & OS files ──────────────────────────────────
 /tmp/
 *.tmp
-*.log
 .DS_Store
 Thumbs.db
 

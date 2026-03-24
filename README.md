@@ -78,6 +78,15 @@ The launch script will:
 bash scripts/demo.sh
 ```
 
+### Documentation
+
+Complete reference for developers and operators:
+- **[Architecture Overview](docs/0_overview.md)**
+- **[API Gateway](docs/service_gateway.md)**
+- **[Orchestrator](docs/service_orchestrator.md)**
+- **[ML Service](docs/service_ml.md)**
+- **[Infrastructure](docs/infrastructure.md)**
+
 ---
 
 ## Commands
@@ -175,11 +184,16 @@ sentinel/
 │   ├── demo.sh                 # Live demo script
 │   ├── train_models.py         # ML model trainer
 │   └── generate_jwt.py         # JWT token generator
+├── docs/                       # Modular developer documentation
+│   ├── 0_overview.md           # System architecture & flow
+│   ├── service_gateway.md      # Gateway details (Go)
+│   ├── service_orchestrator.md # Orchestrator details (Java)
+│   ├── service_ml.md           # ML service details (Python)
+│   └── infrastructure.md       # Shared infra (Prometheus, Grafana)
 ├── docker-compose.yml          # 9-service stack
 ├── launch.sh                   # One-command launcher
 ├── sentinel.sh                 # CLI utility
 ├── Makefile                    # Make targets
-├── DOCS.md                     # Complete developer docs
 └── README.md
 ```
 

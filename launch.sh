@@ -38,7 +38,7 @@ echo -e "\n${CYAN}Starting docker containers...${NC}"
 docker-compose down --remove-orphans 2>/dev/null || true
 
 # 5. Up
-DOCKER_BUILDKIT=0 docker-compose --env-file .env.example up -d --build || fail "Failed to start containers"
+DOCKER_BUILDKIT=0 docker-compose --env-file .env up -d --build || fail "Failed to start containers"
 
 # 6. Health wait loop (max 45s, checking every 2s)
 echo -e "\n${CYAN}Waiting for services to become healthy...${NC}"

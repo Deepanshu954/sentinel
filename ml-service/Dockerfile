@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY model_weights/ /app/models/
 COPY service/ /app/service/
+COPY ml/ /app/ml/
 COPY scripts/ /app/scripts/
 
 RUN chown -R sentinel:sentinel /app

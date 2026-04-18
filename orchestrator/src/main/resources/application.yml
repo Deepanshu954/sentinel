@@ -44,3 +44,18 @@ sentinel:
   polling:
     interval:
       ms: 5000
+  scaling:
+    mode: ${SCALER_MODE:local}
+    sidecar-url: ${SCALING_SIDECAR_URL:http://scaling-sidecar:5050}
+    target-service: ${SCALING_TARGET_SERVICE:demo-backend}
+    min-replicas: ${SCALING_MIN_REPLICAS:1}
+    max-replicas: ${SCALING_MAX_REPLICAS:6}
+    cooldown-seconds: ${SCALING_COOLDOWN_SECONDS:60}
+    max-step-size: ${SCALING_MAX_STEP:2}
+    scale-out-rate-threshold: ${SCALING_OUT_THRESHOLD:500}
+    scale-in-rate-threshold: ${SCALING_IN_THRESHOLD:200}
+    scale-in-delay-seconds: ${SCALING_IN_DELAY:120}
+    aws:
+      region: ${AWS_REGION:us-east-1}
+      asg-name: ${AWS_ASG_NAME:}
+

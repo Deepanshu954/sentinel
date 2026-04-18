@@ -1,9 +1,33 @@
+"""
+╔══════════════════════════════════════════════════════════════════╗
+║  DEPRECATED — Development Stub Only                            ║
+║                                                                ║
+║  This file is a mock API for local development/testing ONLY.   ║
+║  The canonical production entrypoint is:                       ║
+║                                                                ║
+║      ml-service/service/main.py                                ║
+║                                                                ║
+║  The Dockerfile and docker-compose use service/main.py via:    ║
+║      uvicorn service.main:app                                  ║
+║                                                                ║
+║  Do NOT deploy this file in production.                        ║
+╚══════════════════════════════════════════════════════════════════╝
+"""
+
+import warnings
+warnings.warn(
+    "ml-service/main.py is a DEPRECATED development stub. "
+    "Use 'uvicorn service.main:app' for the real API.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List
 import uvicorn
 
-app = FastAPI(title="Sentinel ML Service")
+app = FastAPI(title="Sentinel ML Service (DEPRECATED STUB)")
 
 class FeatureVector(BaseModel):
     endpoint: str

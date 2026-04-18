@@ -40,12 +40,26 @@ Includes 26 calculated features + metadata:
   "endpoint": "/api/test",
   "timestamp": "2024-03-24T12:00:00Z",
   "req_rate_1m": 45.0,
-  "latency_avg_5m": 12.5,
+  "latency_std_5m": 12.5,
   ...
 }
 ```
+
+## Current ML Implementation vs Research Paper
+The system currently implements:
+- **XGBoost Regressor** (with quantile bounds for confidence estimation): Predicts future request rates from 26 features.
+- **Isolation Forest**: Detects anomalous traffic patterns.
+
+The research paper ("Optimizing API Performance Using AI-Based Predictive Request Management") describes an LSTM + XGBoost parallel ensemble architecture. The LSTM component is **not yet implemented**. The current confidence score is derived from quantile regression bounds, not from an LSTM-XGBoost ensemble agreement metric.
+
+### Roadmap — LSTM Parity
+1. Add LSTM time-series model trained on the same 26-feature windows.
+2. Implement ensemble prediction averaging or stacking.
+3. Derive confidence from model agreement (correlation of LSTM vs XGBoost predictions).
+4. Benchmark against paper's claimed 95M request throughput and p95 latency improvements.
 
 ## Red Flags (System-Wide)
 - **Validation Score < 30/30**: Run `./scripts/validate_sentinel.sh` immediately.
 - **InfluxDB Authentication**: Ensure `INFLUX_TOKEN` is synced across all services in `.env`.
 - **Kafka Startup**: Kafka takes ~60s to initialize. Services will retry connection.
+

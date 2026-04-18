@@ -10,7 +10,7 @@ NC='\033[0m'
 echo -e "${CYAN}=== FIXING INFLUXDB BUCKET ===${NC}\n"
 
 # 1. Get the InfluxDB token
-INFLUX_TOKEN="@Deepanshu95"
+INFLUX_TOKEN="${INFLUX_TOKEN:-sentinel-influx-admin-token}"
 INFLUX_ORG="sentinel"
 INFLUX_BUCKET="sentinel-metrics"
 

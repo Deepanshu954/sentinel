@@ -23,3 +23,14 @@ scrape_configs:
       - targets: ["ml-service:8000"]
         labels:
           service: "ml-service"
+
+  - job_name: "demo-backend"
+    metrics_path: "/metrics"
+    dns_sd_configs:
+      - names: ["demo-backend"]
+        type: "A"
+        port: 8081
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+

@@ -17,47 +17,51 @@ if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import sys; exit(0 if s
 fi
 
 # 2. Check if models already exist
-if [ -f "ml-service/models/xgb_model.json" ]; then
+if [ -f "ml-service/model_weights/xgb_model.json" ]; then
     echo -e "${YELLOW}Models already trained.${NC}"
-    read -p "Retrain? (y/n): " -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    if [ "${FORCE_RETRAIN:-0}" = "1" ]; then
+        echo -e "${CYAN}FORCE_RETRAIN=1 set. Continuing with retraining.${NC}"
+    elif [ -t 0 ]; then
+        read -p "Retrain? (y/n): " -n 1 -r
+        echo ""
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 0
+        fi
+    else
+        echo -e "${YELLOW}Non-interactive shell detected. Skipping retrain (set FORCE_RETRAIN=1 to override).${NC}"
         exit 0
     fi
 fi
 
 # 3. Directories
-mkdir -p ml-service/data/raw ml-service/data/processed ml-service/models
+mkdir -p ml-service/data/raw ml-service/data/processed ml-service/model_weights
 
-# 4. Check & Download Datasets
-WIKI_FILE="ml-service/data/raw/wiki_traffic.csv"
-AZURE_FILE="ml-service/data/raw/azure_traces.csv"
-
-if [ ! -f "$WIKI_FILE" ]; then
-    echo -e "${YELLOW}Missing real datasets.${NC}"
-    echo -e "DATASET 1: Wikipedia Web Traffic (Kaggle)"
-    echo -e "Download from: ${BOLD}https://www.kaggle.com/datasets/cpmpml/web-traffic-time-series-forecasting${NC}"
-    echo -e "Place train_1.csv at ${BOLD}${WIKI_FILE}${NC}"
-    
-    echo -e "\nDATASET 2: Azure Traces will be downloaded automatically..."
-    curl -sL https://raw.githubusercontent.com/Azure/AzurePublicDataset/master/data/AzurePublicDatasetV1.csv -o "$AZURE_FILE"
-    
-    if [ ! -f "$WIKI_FILE" ]; then
-        echo -e "\n${RED}${BOLD}WARNING: Using synthetic fallback data${NC} since ${WIKI_FILE} is still missing."
-    fi
-else
-    # If wiki exists, still ensure azure exists
-    if [ ! -f "$AZURE_FILE" ]; then
-        echo -e "${CYAN}Downloading Azure Traces...${NC}"
-        curl -sL https://raw.githubusercontent.com/Azure/AzurePublicDataset/master/data/AzurePublicDatasetV1.csv -o "$AZURE_FILE"
+# 4. Optional public dataset fetch (for multi-source mode)
+if [ "${USE_MULTISOURCE_DATA:-0}" = "1" ]; then
+    if [ "${AUTO_FETCH_DATASETS:-1}" = "1" ]; then
+        echo -e "${CYAN}Fetching open public datasets (NASA + Wikimedia)...${NC}"
+        bash scripts/fetch_public_datasets.sh core || \
+            echo -e "${YELLOW}Dataset fetch failed. Continuing; manifest fallback may apply.${NC}"
+    else
+        echo -e "${YELLOW}AUTO_FETCH_DATASETS=0, skipping dataset download.${NC}"
     fi
 fi
 
-# 5. Execute ML Pipeline
+# 5. Execute ML Pipeline — choose data source
 echo -e "\n${CYAN}Processing Datasets...${NC}"
-source /tmp/sentinel-venv/bin/activate
 
-python3 ml-service/scripts/prepare_dataset.py
+# Activate venv if available
+if [ -f "/tmp/sentinel-venv/bin/activate" ]; then
+    source /tmp/sentinel-venv/bin/activate
+fi
+
+if [ "${USE_MULTISOURCE_DATA:-0}" = "1" ]; then
+    echo -e "${CYAN}Using multi-source pipeline (manifest-driven)...${NC}"
+    python3 ml-service/scripts/build_multisource_training_data.py
+else
+    echo -e "${CYAN}Using legacy synthetic data pipeline...${NC}"
+    python3 ml-service/scripts/prepare_dataset.py
+fi
 
 echo -e "\n${CYAN}Training XGBoost Predictors...${NC}"
 python3 ml-service/ml/train_xgboost.py

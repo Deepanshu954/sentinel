@@ -1,66 +1,62 @@
 # Sentinel .gitignore
 
-# ── Build artifacts ──────────────────────────────────
-target/
-*.class
-*.jar
-!orchestrator/target/orchestrator-*.jar
-
-# ── Python ───────────────────────────────────────────
-__pycache__/
-*.py[cod]
-*.pyo
-venv/
-.venv/
-*.egg-info/
-dist/
-build/
-
-# ── ML models (large binaries, re-trainable) ────────
-ml-service/models/*.json
-ml-service/models/*.pkl
-ml-service/data/*.parquet
-ml-service/libomp.tar.gz
-
-# ── Environment ──────────────────────────────────────
-.env
-sentinel.env
-myenv
-!.env.example
-
-# ── Python ───────────────────────────────────────────
-__pycache__/
-*.py[cod]
-*.pyo
-venv/
-.venv/
-myenv/
-*.egg-info/
-dist/
-build/
-*.log
-
-# ── Validation / test outputs ────────────────────────
-validation_*.txt
-train_log.txt
-e2e_test_log.txt
-e2e_report.md
-orchestrator.log
-*.log
-
-# ── Temp & OS files ──────────────────────────────────
-/tmp/
-*.tmp
+# OS / editor junk
 .DS_Store
 Thumbs.db
-
-# ── IDE ──────────────────────────────────────────────
-.vscode/
 .idea/
+.vscode/
 *.iml
 *.swp
 *.swo
 *~
 
-# ── Docker ───────────────────────────────────────────
+# Environment / secrets
+.env
+.env.local
+sentinel.env
+myenv
+!.env.example
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Python packaging/build
+build/
+dist/
+*.egg-info/
+
+# Java / Maven
+orchestrator/target/
+*.class
+
+# Local logs and temp artifacts
+*.log
+/tmp/
+*.tmp
+validation_*.txt
+train_log.txt
+e2e_test_log.txt
+e2e_report.md
+orchestrator.log
+
+# Docker local overrides
 docker-compose.override.yml
+
+# Large/generated ML data artifacts
+ml-service/data/raw/*
+ml-service/data/processed/*
+!ml-service/data/raw/.gitkeep
+!ml-service/data/processed/.gitkeep
+
+# Keep model_weights tracked if intentionally committed, but avoid stray blobs
+ml-service/model_weights/*.onnx
+ml-service/model_weights/*.pt
+ml-service/model_weights/*.h5

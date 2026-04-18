@@ -18,6 +18,7 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
+@ConditionalOnProperty(value = "sentinel.streaming.enabled", havingValue = "true", matchIfMissing = true)
 public class InfluxDBWriter implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(InfluxDBWriter.class);

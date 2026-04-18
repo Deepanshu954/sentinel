@@ -1,0 +1,49 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    show-sql: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: orchestrator-test-group
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  metrics:
+    export:
+      prometheus:
+        enabled: false
+
+influx:
+  url: http://localhost:8086
+  token: test-token
+  org: test-org
+  bucket: test-bucket
+
+sentinel:
+  confidence:
+    threshold: 0.75
+  scheduler:
+    enabled: false
+  streaming:
+    enabled: false
+  polling:
+    interval:
+      ms: 60000

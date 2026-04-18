@@ -12,6 +12,34 @@ The ML Service provides the predictive power for the Sentinel platform. It serve
 - **Model Handlers**: `ml-service/service/models.py`
 - **Training Scripts**: `ml-service/ml/train_xgboost.py`, `ml-service/ml/train_isolation_forest.py`
 - **Synthetic Data**: `ml-service/scripts/generate_training_data.py`
+- **Multi-Source Builder**: `ml-service/scripts/build_multisource_training_data.py`
+- **Dataset Adapters**: `ml-service/scripts/adapters/` (wikimedia, azure, google_cluster, alibaba, apache_access)
+- **Dataset Manifest**: `ml-service/scripts/dataset_manifest.json`
+- **Quality Checks**: `ml-service/scripts/data_quality.py`
+
+## Data Ingestion Pipeline
+Sentinel supports two training data paths:
+
+### Legacy (Synthetic)
+```bash
+bash scripts/train.sh
+```
+Uses `prepare_dataset.py` → synthetic 30-day traffic → `training_data.parquet`.
+
+### Multi-Source (Research-Grade)
+```bash
+USE_MULTISOURCE_DATA=1 bash scripts/train.sh
+```
+Uses `build_multisource_training_data.py` with manifest-driven adapter dispatch:
+1. Reads `dataset_manifest.json` for enabled sources
+2. Dispatches each source to a typed adapter (Wikimedia, Azure, Google, Alibaba)
+3. Normalizes all sources to `(timestamp UTC, value float)` format
+4. Fuses sources using `sum` or `weighted_mean` mode
+5. Engineers 26 features from the composite series
+6. Generates `dataset_quality_report.json` pre-training
+7. Outputs `training_data.parquet`
+
+See **[Dataset Preparation Guide](DATASET_PREP_GUIDE.md)** for full details.
 
 ## Features (26-Vector Order)
 The Orchestrator MUST send features in this exact order for the XGBoost and Isolation Forest models to function correctly:

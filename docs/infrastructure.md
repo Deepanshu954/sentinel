@@ -24,11 +24,14 @@ Sentinel relies on a robust set of supporting services for messaging, storage, a
 | InfluxDB | sentinel-influxdb | 8086 | 8086 |
 | Prometheus | sentinel-prometheus | 9090 | 9090 |
 | Grafana | sentinel-grafana | 3000 | 3000 |
+| Demo Backend | sentinel-demo-backend | 8081 | 8081 |
+| Scaling Sidecar | sentinel-scaling-sidecar | 5050 | 5050 |
 
 ## WHERE is the config?
 - **Grafana Provisioning**: `infra/grafana/provisioning/`
-- **Dashboards**: `infra/grafana/sentinel.json`
+- **Dashboards**: `infra/grafana/dashboards/sentinel.json`
 - **Prometheus Config**: `infra/prometheus/prometheus.yml`
+- **Local Scaling Control**: `scaling-sidecar/app.py`
 
 ## Red Flags
 - **Kafka KRaft Initializing**: Kafka takes 30-60s to boot. If services are failing to connect, **WAIT**.

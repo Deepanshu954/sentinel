@@ -15,10 +15,15 @@ fail() { echo -e "${RED}✗ FAIL${NC} $1"; exit 1; }
 ok()   { echo -e "${GREEN}✓ PASS${NC} $1"; }
 warn() { echo -e "${YELLOW}⚠ WARN${NC} $1"; }
 
-# 1. Check docker-compose
-if ! command -v docker-compose >/dev/null 2>&1; then
-    fail "docker-compose not found. Run scripts/build.sh first."
+# 1. Detect docker compose command (modern plugin first, then legacy standalone)
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_CMD="docker-compose"
+else
+    fail "Neither 'docker compose' (plugin) nor 'docker-compose' (standalone) found. Install Docker Desktop or run scripts/build.sh."
 fi
+echo -e "${CYAN}Using compose command: ${COMPOSE_CMD}${NC}"
 
 # 2. Check variables
 if [ ! -f ".env.example" ]; then
@@ -35,10 +40,10 @@ fi
 echo -e "\n${CYAN}Starting docker containers...${NC}"
 
 # 4. Silent Down
-docker-compose down --remove-orphans 2>/dev/null || true
+$COMPOSE_CMD down --remove-orphans 2>/dev/null || true
 
 # 5. Up
-DOCKER_BUILDKIT=0 docker-compose --env-file .env up -d --build || fail "Failed to start containers"
+DOCKER_BUILDKIT=0 $COMPOSE_CMD --env-file .env up -d --build || fail "Failed to start containers"
 
 # 6. Health wait loop (max 45s, checking every 2s)
 echo -e "\n${CYAN}Waiting for services to become healthy...${NC}"
@@ -47,7 +52,7 @@ attempt=1
 
 while [ $attempt -le $max_attempts ]; do
     # Get all 9 status lines
-    raw_status=$(docker-compose ps --format "table {{.Service}}\t{{.State}}\t{{.Status}}" | tail -n +2)
+    raw_status=$($COMPOSE_CMD ps --format "table {{.Service}}\t{{.State}}\t{{.Status}}" | tail -n +2)
     service_count=$(echo "$raw_status" | wc -l | tr -d ' ')
     
     # We want 9 services. They must either contain "Up" or "healthy".
@@ -77,7 +82,7 @@ done
 
 if [ $attempt -gt $max_attempts ]; then
     echo -e "\n${RED}Timed out waiting for services.${NC}"
-    docker-compose ps
+    $COMPOSE_CMD ps
     exit 1
 fi
 

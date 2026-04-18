@@ -74,7 +74,6 @@ def load_models():
         if os.path.exists(main_model_path):
             m = xgb.XGBRegressor()
             m.load_model(main_model_path)
-            m.load_model(main_model_path)
             models["main"] = m
             
         if os.path.exists(lower_model_path):

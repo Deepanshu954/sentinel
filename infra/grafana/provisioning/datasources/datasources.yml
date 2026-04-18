@@ -9,7 +9,7 @@ datasources:
       organization: sentinel
       defaultBucket: sentinel-metrics
     secureJsonData:
-      token: "@Deepanshu95"
+      token: "${INFLUX_TOKEN}"
     isDefault: true
   - name: Prometheus
     type: prometheus

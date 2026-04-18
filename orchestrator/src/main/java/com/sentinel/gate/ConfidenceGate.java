@@ -6,10 +6,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class ConfidenceGate {
     @Value("${sentinel.confidence.threshold:0.75}")
-    private double threshold;
+    private double threshold = 0.75;
 
     @Value("${sentinel.rate.threshold:20}")
-    private double rateThreshold;
+    private double rateThreshold = 20.0;
 
     public GateDecision evaluate(double confidence, double predictedRate) {
         if (predictedRate < rateThreshold) {
@@ -29,6 +29,14 @@ public class ConfidenceGate {
 
     public double getThreshold() {
         return this.threshold;
+    }
+
+    public void setRateThreshold(double rateThreshold) {
+        this.rateThreshold = rateThreshold;
+    }
+
+    public double getRateThreshold() {
+        return this.rateThreshold;
     }
 
     public record GateDecision(String action, String reason, double confidence) {}

@@ -5,7 +5,8 @@ scikit-learn>=1.4.2
 pandas>=2.2.1
 numpy>=1.26.4
 pydantic>=2.6.4
-httpx>=0.27.0
+# FastAPI 0.110 / Starlette 0.36 test client is incompatible with httpx 0.28+
+httpx>=0.27.0,<0.28.0
 influxdb-client>=1.40.0
 confluent-kafka>=2.3.0
 pyarrow

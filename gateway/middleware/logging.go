@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Deepanshu954/sentinel/gateway/metrics"
@@ -44,10 +45,14 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 		latency := time.Since(start)
 		clientID := ClientIDFromContext(r.Context())
 
+		// Normalize route to prevent unbounded Prometheus label cardinality.
+		// Raw paths like /api/products/123 would create infinite time series.
+		route := normalizeRoute(r.URL.Path)
+
 		// Record Prometheus metrics
 		statusLabel := fmt.Sprintf("%d", rc.statusCode)
-		metrics.RequestsTotal.WithLabelValues(r.Method, r.URL.Path, statusLabel).Inc()
-		metrics.LatencySeconds.WithLabelValues(r.Method, r.URL.Path).Observe(latency.Seconds())
+		metrics.RequestsTotal.WithLabelValues(r.Method, route, statusLabel).Inc()
+		metrics.LatencySeconds.WithLabelValues(r.Method, route).Observe(latency.Seconds())
 
 		slog.Info("request completed",
 			"method", r.Method,
@@ -58,4 +63,18 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 			"bytes", rc.bytesWritten,
 		)
 	})
+}
+
+// normalizeRoute collapses raw URL paths into bounded route labels
+// to prevent Prometheus cardinality explosion. Maps all /api/* paths
+// to a single "/api/*" label, and keeps /health and /metrics as-is.
+func normalizeRoute(path string) string {
+	switch {
+	case path == "/health" || path == "/metrics":
+		return path
+	case strings.HasPrefix(path, "/api/"):
+		return "/api/*"
+	default:
+		return "/other"
+	}
 }

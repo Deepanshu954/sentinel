@@ -14,8 +14,9 @@ class DummyXGBRegressor:
         return np.array([2.0])
 
 class DummyIForest:
-    def decision_function(self, X):
-        return np.array([-0.15]) # anomaly score < -0.1
+    def score_samples(self, X):
+        """Return score > -0.1 to trigger the 'anomaly' branch."""
+        return np.array([-0.05])
 
 @pytest.fixture(autouse=True)
 def setup_models():
@@ -34,11 +35,10 @@ def setup_models():
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {
-        "status": "ok",
-        "models_loaded": True,
-        "model_versions": {"xgboost": xgb.__version__}
-    }
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["models_loaded"] is True
+    assert data["model_count"] == 4
 
 def test_predict_success():
     payload = {"features": [0.0] * 26}
@@ -50,13 +50,17 @@ def test_predict_success():
     assert data["upper_bound"] == 2.0
     assert "confidence" in data
     assert "action" in data
+    assert data["action"] in ("DISPATCH", "HOLD")
 
 def test_predict_missing_feature():
-    payload = {"features": [0.0] * 25} # One missing
+    payload = {"features": [0.0] * 25}  # One missing
     response = client.post("/predict", json=payload)
-    # The payload is accepted by Pydantic (list of floats), but inside predict it might fail reshape 
-    # if it strictly expects 26 (but our code just does reshape(1, -1), so it passes but might fail in XGBoost).
-    pass # As long as it doesn't crash here or returns 500 when XGBoost fails
+    assert response.status_code == 422
+
+def test_predict_extra_feature():
+    payload = {"features": [0.0] * 27}  # One extra
+    response = client.post("/predict", json=payload)
+    assert response.status_code == 422
 
 def test_anomaly_detected():
     payload = {"features": [1.0] * 26}
@@ -65,6 +69,19 @@ def test_anomaly_detected():
     data = response.json()
     assert data["is_anomaly"] is True
     assert data["interpretation"] == "anomaly"
+
+def test_anomaly_normal():
+    """Test that a score deep below -0.2 is classified as normal."""
+    class NormalIForest:
+        def score_samples(self, X):
+            return np.array([-0.5])
+    models["iforest"] = NormalIForest()
+    payload = {"features": [0.0] * 26}
+    response = client.post("/anomaly", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["is_anomaly"] is False
+    assert data["interpretation"] == "normal"
 
 def test_metrics():
     response = client.get("/metrics")

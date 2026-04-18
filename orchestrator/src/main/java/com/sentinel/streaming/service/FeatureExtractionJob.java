@@ -19,6 +19,7 @@ import org.apache.kafka.streams.state.WindowStoreIterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Properties;
 
 @Service
+@ConditionalOnProperty(value = "sentinel.streaming.enabled", havingValue = "true", matchIfMissing = true)
 public class FeatureExtractionJob {
 
     private static final Logger log = LoggerFactory.getLogger(FeatureExtractionJob.class);
@@ -127,7 +129,7 @@ public class FeatureExtractionJob {
                     timestamp = record.timestamp();
                 }
 
-                Double latency = node.has("latency_avg") ? node.get("latency_avg").asDouble() : (node.has("latency") ? node.get("latency").asDouble() : 10.0);
+                Double latency = node.has("latency_ms") ? node.get("latency_ms").asDouble() : (node.has("latency_avg") ? node.get("latency_avg").asDouble() : (node.has("latency") ? node.get("latency").asDouble() : 10.0));
 
                 long windowStart = (timestamp / 1000) * 1000;
                 

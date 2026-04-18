@@ -22,9 +22,9 @@ The Gateway is the entry point for all API traffic. It handles authentication, r
 
 ## Metrics
 The Gateway exposes the following key Prometheus metrics:
-- `sentinel_gateway_requests_total`: Counter of all authenticated requests.
-- `sentinel_gateway_request_duration_seconds`: Histogram of latency per endpoint.
-- `sentinel_gateway_errors_total`: Counter of 4xx and 5xx responses.
+- `sentinel_gateway_requests_total`: Counter of all requests by method, endpoint, and status.
+- `sentinel_gateway_latency_seconds`: Histogram of request latency per endpoint.
+- `sentinel_gateway_rate_limited_total`: Counter of requests rejected by rate limiting per client.
 
 ## Safe/Dangerous Changes
 - **[SAFE]**: Updating Prometheus labels or adding non-blocking logging.

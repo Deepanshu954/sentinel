@@ -53,7 +53,7 @@ bash launch.sh
 ### Prerequisites
 
 - Docker Desktop (with Docker Compose v2)
-- Python 3.9+
+- Python 3.11+
 - ~3 GB free RAM
 
 ### Launch
@@ -86,6 +86,36 @@ Complete reference for developers and operators:
 - **[Orchestrator](docs/service_orchestrator.md)**
 - **[ML Service](docs/service_ml.md)**
 - **[Infrastructure](docs/infrastructure.md)**
+- **[Dataset Preparation Guide](docs/DATASET_PREP_GUIDE.md)**
+
+### Dataset Strategy
+
+Sentinel supports two data paths for ML model training:
+
+| Mode | Command | Description |
+|------|---------|-------------|
+| **Legacy** | `bash scripts/train.sh` | Synthetic 30-day traffic (default, no downloads) |
+| **Multi-Source** | `USE_MULTISOURCE_DATA=1 bash scripts/train.sh` | Manifest-driven real-world dataset fusion |
+
+One-command local dataset bootstrap (no Kaggle account required):
+```bash
+bash scripts/fetch_public_datasets.sh core
+```
+
+Multi-source pipeline supports: NASA HTTP traces, Wikimedia pageviews, Azure Functions/VM traces, Google ClusterData 2019, and Alibaba cluster traces. See the [Dataset Preparation Guide](docs/DATASET_PREP_GUIDE.md) for setup instructions.
+
+### Autoscaling Demo
+
+Sentinel includes a local autoscaling demo that triggers **real Docker replica changes** based on ML predictions:
+
+```bash
+bash scripts/demo.sh    # 5-phase scenario: baseline → surge → recovery
+```
+
+The demo runs entirely on your MacBook — no cloud spend required. It uses a `demo-backend` service as the scaling target (1–6 replicas), with anti-thrashing guardrails (cooldown, hysteresis, step limits).
+
+- **[How it works](docs/local_autoscaling_demo.md)** — architecture, phases, configuration
+- **[AWS activation guide](docs/aws_future_activation.md)** — switching to production AWS ASG scaling
 
 ---
 
@@ -113,6 +143,8 @@ make down    # Stop all services
 make test    # Run validation suite
 make demo    # Run live demo
 make train   # Train ML models in container
+make datasets # Fetch public datasets for local multi-source training
+make train-multisource # Build multi-source dataset + train locally
 make clean   # Destroy all data
 ```
 
@@ -145,6 +177,8 @@ make clean   # Destroy all data
 | Kafka | 9092 | — |
 | Redis | 6379 | — |
 | PostgreSQL | 5432 | — |
+| Demo Backend (target) | 8081 | http://localhost:8081 |
+| Scaling Sidecar | 5050 | http://localhost:5050 |
 
 **Grafana login:** `admin` / `sentinel`
 
@@ -169,20 +203,24 @@ sentinel/
 │       ├── gate/               # ConfidenceGate
 │       ├── dispatcher/         # ActionDispatcher
 │       ├── scheduler/          # PredictionScheduler
-│       └── stream/             # Kafka Streams topology
+│       ├── streaming/          # Kafka Streams topology
+│       └── scaling/            # Local/AWS scaling executors + policy
 ├── ml-service/                 # Python ML service
-│   ├── main.py                 # FastAPI entrypoint
+│   ├── main.py                 # DEPRECATED dev stub (see service/main.py)
 │   ├── service/main.py         # API routes (/predict, /anomaly)
 │   ├── ml/                     # Training scripts
-│   ├── models/                 # Trained model artifacts (.json, .pkl)
-│   └── scripts/                # Data generation script
+│   ├── model_weights/          # Trained model artifacts (.json, .pkl)
+│   └── scripts/                # Multi-source dataset + quality pipeline
+├── demo-backend/               # Load-sensitive backend used for scaling demo
+├── scaling-sidecar/            # Docker scaling control plane (local mode)
 ├── infra/
 │   ├── grafana/                # Dashboard + datasource configs
 │   └── prometheus/             # Prometheus scrape config
 ├── scripts/
 │   ├── validate_sentinel.sh    # 30-point validation suite
 │   ├── demo.sh                 # Live demo script
-│   ├── train_models.py         # ML model trainer
+│   ├── train.sh                # ML model training orchestration
+│   ├── fetch_public_datasets.sh # Local dataset bootstrap
 │   └── generate_jwt.py         # JWT token generator
 ├── docs/                       # Modular developer documentation
 │   ├── 0_overview.md           # System architecture & flow
@@ -190,7 +228,7 @@ sentinel/
 │   ├── service_orchestrator.md # Orchestrator details (Java)
 │   ├── service_ml.md           # ML service details (Python)
 │   └── infrastructure.md       # Shared infra (Prometheus, Grafana)
-├── docker-compose.yml          # 9-service stack
+├── docker-compose.yml          # 11-service stack
 ├── launch.sh                   # One-command launcher
 ├── sentinel.sh                 # CLI utility
 ├── Makefile                    # Make targets

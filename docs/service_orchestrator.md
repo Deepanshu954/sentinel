@@ -9,10 +9,10 @@ The Orchestrator is the brain of the platform. It extracts features from raw tra
 - **Action Dispatcher**: Publishes scaling directives to Redis and logs them to PostgreSQL.
 
 ## WHERE is the code?
-- **Kafka Streams**: `orchestrator/src/main/java/com/sentinel/stream/`
+- **Kafka Streams**: `orchestrator/src/main/java/com/sentinel/streaming/`
 - **ML Client**: `orchestrator/src/main/java/com/sentinel/client/MLServiceClient.java`
 - **Confidence Gate**: `orchestrator/src/main/java/com/sentinel/gate/ConfidenceGate.java`
-- **Audit Log**: `orchestrator/src/main/java/com/sentinel/dispatcher/PostgresDispatcher.java`
+- **Audit Log**: `orchestrator/src/main/java/com/sentinel/dispatcher/ActionDispatcher.java`
 
 ## Dependencies
 - **Kafka**: Consumes `api.events`, produces `api.features`.

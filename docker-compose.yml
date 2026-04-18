@@ -9,7 +9,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-sentinel-super-secret-jwt-key-change-in-prod}
       - REDIS_ADDR=redis:6379
       - KAFKA_BROKERS=kafka:9092
-      - TARGET_URL=${TARGET_URL}
+      - TARGET_URL=${TARGET_URL:-http://demo-backend:8081}
       - INFLUX_URL=http://influxdb:8086
       - INFLUX_TOKEN=${INFLUX_TOKEN:-sentinel-influx-admin-token}
       - INFLUX_ORG=sentinel
@@ -158,13 +158,23 @@ services:
       - SPRING_DATASOURCE_USERNAME=sentinel
       - SPRING_DATASOURCE_PASSWORD=sentinel-password
       - REDIS_ADDR=${REDIS_ADDR:-redis:6379}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - KAFKA_BROKERS=${KAFKA_BROKERS:-kafka:9092}
       - INFLUX_URL=http://influxdb:8086
       - INFLUX_TOKEN=${INFLUX_TOKEN:-sentinel-influx-admin-token}
       - INFLUX_ORG=sentinel
       - INFLUX_BUCKET=sentinel-metrics
       - ML_SERVICE_URL=http://ml-service:8000
-      - CONFIDENCE_THRESHOLD=0.01
+      - CONFIDENCE_THRESHOLD=${CONFIDENCE_THRESHOLD:-0.75}
+      - SCALER_MODE=${SCALER_MODE:-local}
+      - SCALING_SIDECAR_URL=http://scaling-sidecar:5050
+      - SCALING_TARGET_SERVICE=${SCALING_TARGET_SERVICE:-demo-backend}
+      - SCALING_MIN_REPLICAS=${SCALING_MIN_REPLICAS:-1}
+      - SCALING_MAX_REPLICAS=${SCALING_MAX_REPLICAS:-6}
+      - SCALING_COOLDOWN_SECONDS=${SCALING_COOLDOWN_SECONDS:-60}
+      - SCALING_OUT_THRESHOLD=${SCALING_OUT_THRESHOLD:-500}
+      - SCALING_IN_THRESHOLD=${SCALING_IN_THRESHOLD:-200}
     depends_on:
       kafka:
         condition: service_healthy
@@ -206,12 +216,44 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: sentinel
+      INFLUX_TOKEN: ${INFLUX_TOKEN:-sentinel-influx-admin-token}
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning
       - ./infra/grafana/dashboards:/var/lib/grafana/dashboards
       - grafana-data:/var/lib/grafana
     depends_on:
       - prometheus
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  # ─── Demo Backend (Scalable Target) ─────────────────────────────────────────
+  demo-backend:
+    build: ./demo-backend
+    # No container_name — allows docker compose scale
+    expose:
+      - "8081"
+    environment:
+      - PORT=8081
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+
+  # ─── Scaling Sidecar (Docker Socket Bridge) ─────────────────────────────────
+  scaling-sidecar:
+    build: ./scaling-sidecar
+    container_name: sentinel-scaling-sidecar
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/workspace:ro
+    environment:
+      - COMPOSE_DIR=/workspace
+      - COMPOSE_PROJECT=sentinel
+      - PORT=5050
+    expose:
+      - "5050"
     networks:
       - sentinel-network
     restart: unless-stopped

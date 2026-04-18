@@ -11,6 +11,7 @@ import com.sentinel.repository.ScalingActionRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +22,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Component
+@ConditionalOnProperty(value = "sentinel.scheduler.enabled", havingValue = "true", matchIfMissing = true)
 public class PredictionScheduler {
     private static final Logger logger = LoggerFactory.getLogger(PredictionScheduler.class);
 
@@ -79,16 +81,25 @@ public class PredictionScheduler {
         
         GateDecision decision = confidenceGate.evaluate(prediction.confidence(), prediction.predicted_req_rate());
         
+        ScalingAction record = new ScalingAction();
+        
         if ("DISPATCH".equals(decision.action())) {
-            actionDispatcher.dispatch(prediction);
+            var dispatchResult = actionDispatcher.dispatch(prediction);
+            
+            // Record with scaling metadata
+            record.setDesiredReplicas(dispatchResult.desiredReplicas());
+            record.setActualReplicas(dispatchResult.actualReplicas());
+            record.setProvisioningLatencyMs(dispatchResult.provisioningLatencyMs());
+            record.setScalerMode(dispatchResult.scalerMode());
+            record.setScaleAction(dispatchResult.scaleAction());
         } else {
             logger.info("HOLD: Prediction confidence or rate didn't meet thresholds. Reason: {}, Confidence: {}", 
                     decision.reason(), decision.confidence());
+            record.setScaleAction("HOLD");
         }
         
         long durationMs = System.currentTimeMillis() - startTime;
         
-        ScalingAction record = new ScalingAction();
         record.setTimestamp(Instant.now());
         record.setActionType(decision.action());
         record.setConfidence(decision.confidence());

@@ -26,4 +26,4 @@ class AnomalyResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     models_loaded: bool
-    model_versions: Dict[str, Any]
+    model_count: int
